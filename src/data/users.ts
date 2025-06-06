@@ -1,46 +1,38 @@
 
 export interface User {
-  id: string; // Typically a Firestore document ID or Firebase Auth UID
+  id: string; // Firebase Auth UID will be used here
   email: string;
   name: string;
-  role: 'admin' | 'user';
-  createdAt?: Date; // Optional: for tracking new users
+  role: 'admin' | 'user'; // Simplified roles
+  createdAt?: Date; 
 }
 
-// Mock Authentication Note:
-// This application uses a mock authentication system based on email addresses.
-// There is no password check. Roles are determined by the email in this mock data
-// or the data seeded into Firestore.
-// Admin Email (example): odhiambostallone73@gmail.com
-// User Email (example): musigahstallone@gmail.com
+// This mockUsers array is NO LONGER USED for authentication or direct seeding via button.
+// It can serve as a reference or for initial manual Firestore setup if desired.
+// User creation now happens via the signup page, and roles are 'user' by default.
+// To make a user an admin, you'd manually edit their 'role' field in their Firestore document
+// (found under the 'users' collection, with the document ID being their Firebase Auth UID) to 'admin'.
 
 export const mockUsers: User[] = [
   {
-    id: 'user-admin-001',
-    email: 'odhiambostallone73@gmail.com',
-    name: 'Stallone Odhiambo',
-    role: 'admin',
+    id: 'mock-admin-uid-placeholder', // Replace with actual UID after signup if manually creating
+    email: 'odhiambostallone73@gmail.com', // This email can be used to sign up
+    name: 'Stallone Odhiambo (Admin)',
+    role: 'admin', // Manually set this in Firestore for the admin user
     createdAt: new Date('2023-10-01T10:00:00Z')
   },
   {
-    id: 'user-regular-002',
-    email: 'musigahstallone@gmail.com',
-    name: 'Musigah Stallone',
+    id: 'mock-user-uid-placeholder', // Replace with actual UID after signup
+    email: 'musigahstallone@gmail.com', // This email can be used to sign up
+    name: 'Musigah Stallone (User)',
     role: 'user',
     createdAt: new Date('2023-10-15T11:30:00Z')
   },
   {
-    id: 'user-regular-003',
+    id: 'mock-jane-uid-placeholder',
     email: 'jane.doe@example.com',
     name: 'Jane Doe',
     role: 'user',
     createdAt: new Date() 
-  },
-  {
-    id: 'user-regular-004',
-    email: 'john.smith@example.com',
-    name: 'John Smith',
-    role: 'user',
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) 
   },
 ];

@@ -4,23 +4,28 @@ import { BookCopy, Users, BarChart3, AlertTriangle, Info, Database, DownloadClou
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { countBooksInDb } from '@/lib/book-service-firebase';
-import { countUsersInDb } from '@/lib/user-service-firebase'; // New import
+import { countUsersInDb } from '@/lib/user-service-firebase'; 
 import SeedDatabaseButton from '@/components/admin/SeedDatabaseButton';
-import SeedUsersButton from '@/components/admin/SeedUsersButton'; // New import for user seeding
+// SeedUsersButton is removed as user seeding is no longer a feature. Users sign up directly.
 
 export default async function AdminDashboardPage() {
   let bookCount = 0;
-  let userCount = 0; // New state for user count
+  let userCount = 0; 
   let firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 
   if (firebaseConfigured) {
-    bookCount = await countBooksInDb();
-    userCount = await countUsersInDb(); // Fetch user count
+    try {
+      bookCount = await countBooksInDb();
+      userCount = await countUsersInDb(); 
+    } catch (error) {
+      console.error("Error fetching dashboard counts:", error);
+      // Counts will remain 0 if fetching fails
+    }
   }
 
   const stats = [
     { title: 'Total Books in Catalog', value: firebaseConfigured ? bookCount.toString() : 'N/A', icon: BookCopy, href: '/admin/books', description: 'Manage current book catalog' },
-    { title: 'Total Registered Users', value: firebaseConfigured ? userCount.toString() : 'N/A', icon: Users, href: '#', description: 'View and manage users (Coming Soon)' }, // Updated
+    { title: 'Total Registered Users', value: firebaseConfigured ? userCount.toString() : 'N/A', icon: Users, href: '/admin/users', description: 'View registered users' }, // Updated link
     { title: 'New Users (Today)', value: 'N/A', icon: UserPlus, description: 'Requires user activity tracking' },
     { title: 'Total Downloads', value: 'N/A', icon: DownloadCloud, description: 'Requires download logging' },
     { title: 'Sales Overview', value: 'N/A', icon: BarChart3, description: 'Requires order & payment integration' },
@@ -77,11 +82,11 @@ export default async function AdminDashboardPage() {
                 <CardTitle className="flex items-center">
                     <Database className="mr-2 h-5 w-5"/> Database Actions
                 </CardTitle>
-                <CardDescription>Perform actions like seeding the database with mock data.</CardDescription>
+                <CardDescription>Seed the book database with mock data. User creation is now via signup.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row gap-4">
                 <SeedDatabaseButton />
-                <SeedUsersButton /> {/* Added seed users button */}
+                {/* SeedUsersButton removed */}
             </CardContent>
         </Card>
       )}
@@ -107,13 +112,16 @@ export default async function AdminDashboardPage() {
       <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-700 rounded-md">
         <p className="font-bold flex items-center"><Info className="mr-2 h-5 w-5" />Authentication & Tracking Note:</p>
         <p>
-          - A **mock authentication** system is in place. Login with pre-defined emails (see Header login popover). Admin access is based on this mock login.
+          - **Authentication** is now handled by Firebase Authentication (Email/Password).
         </p>
         <p>
-          - Features like "New Users Today," "Total Downloads," and "Sales Overview" require full Firebase Authentication, user activity logging to Firestore, and payment integration. They are currently placeholders.
+          - Admin panel access requires a user to be logged in and have their 'role' field in Firestore set to 'admin'.
+        </p>
+        <p>
+          - Features like "New Users Today," "Total Downloads," and "Sales Overview" require further integration for activity logging and payment processing.
         </p>
          <p>
-          - Cart functionality remains **browser-specific** (using localStorage). True user-specific carts require full Firebase Authentication and storing cart data in Firestore.
+          - Cart functionality remains **browser-specific** (using localStorage). True user-specific carts require storing cart data in Firestore, linked by user IDs.
         </p>
       </div>
       
@@ -126,7 +134,7 @@ export default async function AdminDashboardPage() {
           - <strong className="text-green-700">Book & User Metadata:</strong> Information is managed in Firebase Firestore and will persist.
         </p>
         <p className="mt-2">
-          The "Seed Database" and "Seed User Data" actions populate Firestore with data from `src/data/books.ts` and `src/data/users.ts` respectively.
+          The "Seed Database" action populates the 'books' collection from `src/data/books.ts`. Users are now created via the signup page.
         </p>
       </div>
     </div>

@@ -1,4 +1,7 @@
 
+'use client'; // Make this a client component to use AuthContext for conditional rendering
+
+import { useEffect, useState } from 'react';
 import { getBookByIdFromDb } from '@/lib/book-service-firebase';
 import type { Book } from '@/data/books';
 import Image from 'next/image';
@@ -6,27 +9,54 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { ShoppingCart, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { notFound, useParams } from 'next/navigation'; // useParams for client components
+import { ShoppingCart, ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react';
 import AddToCartButton from '@/components/books/AddToCartButton';
-import PriceDisplay from '@/components/books/PriceDisplay'; // New component for client-side price formatting
+import PriceDisplay from '@/components/books/PriceDisplay';
+import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 
-interface BookDetailsPageProps {
-  params: { id: string };
-}
-
-export default async function BookDetailsPage({ params }: BookDetailsPageProps) {
+export default function BookDetailsPage() {
+  const params = useParams(); // Use useParams for client components
+  const bookId = typeof params.id === 'string' ? params.id : '';
+  
+  const [book, setBook] = useState<Book | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  let book: Book | null = null;
-  let fetchError: string | null = null;
+  const { currentUser, isLoading: authIsLoading } = useAuth(); // Get currentUser from AuthContext
 
-  if (firebaseConfigured) {
-    try {
-      book = await getBookByIdFromDb(params.id);
-    } catch (error) {
-      console.error(`Error fetching book ${params.id}:`, error);
-      fetchError = error instanceof Error ? error.message : "An unknown error occurred.";
+  useEffect(() => {
+    async function fetchBook() {
+      if (!bookId) {
+        setIsLoading(false);
+        // Potentially call notFound() or set an error if bookId is invalid early
+        return;
+      }
+      if (firebaseConfigured) {
+        try {
+          const fetchedBook = await getBookByIdFromDb(bookId);
+          setBook(fetchedBook);
+          if (!fetchedBook) {
+            // If Firebase is configured but book not found, it's a true 404 for this ID
+             setFetchError("Book not found."); // Or trigger notFound() after state update
+          }
+        } catch (error) {
+          console.error(`Error fetching book ${bookId}:`, error);
+          setFetchError(error instanceof Error ? error.message : "An unknown error occurred.");
+        }
+      }
+      setIsLoading(false);
     }
+    fetchBook();
+  }, [bookId, firebaseConfigured]);
+
+  if (isLoading || authIsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg text-muted-foreground">Loading book details...</p>
+      </div>
+    );
   }
 
   if (!firebaseConfigured) {
@@ -42,8 +72,13 @@ export default async function BookDetailsPage({ params }: BookDetailsPageProps) 
     );
   }
   
-  if (fetchError) {
-     return (
+  if (fetchError && !book) { // If there was an error and no book was found
+     // If the specific error was "Book not found", trigger Next.js 404
+    if (fetchError.toLowerCase().includes("book not found")) {
+        notFound();
+    }
+    // For other errors, display an error message
+    return (
       <div className="max-w-4xl mx-auto text-center py-10">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
         <h1 className="text-2xl font-bold text-destructive mb-2">Error Loading Book</h1>
@@ -56,6 +91,8 @@ export default async function BookDetailsPage({ params }: BookDetailsPageProps) 
   }
 
   if (!book) {
+    // This will be caught if fetchBook sets book to null and no error, or if error wasn't "not found"
+    // but still resulted in no book.
     notFound();
   }
 
@@ -92,14 +129,19 @@ export default async function BookDetailsPage({ params }: BookDetailsPageProps) 
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6 pt-0">
-              <PriceDisplay usdPrice={book.price} className="text-2xl font-bold text-primary mb-4" /> {/* Updated price display */}
+              <PriceDisplay usdPrice={book.price} className="text-2xl font-bold text-primary mb-4" /> 
               <Separator className="my-4" />
               <h3 className="text-xl font-semibold mb-2 font-headline">Description</h3>
               <p className="text-base leading-relaxed mb-6 whitespace-pre-line">
                 {book.longDescription || book.description}
               </p>
-              <div className="flex space-x-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
                 <AddToCartButton book={book} />
+                {!currentUser && !authIsLoading && (
+                  <p className="text-sm text-muted-foreground">
+                    Or <Link href="/login" className="text-primary hover:underline">login</Link> to add to cart.
+                  </p>
+                )}
               </div>
             </CardContent>
           </div>

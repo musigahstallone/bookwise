@@ -1,11 +1,11 @@
 
-'use client'; // Must be a client component for useAuth and client-side redirect
+'use client'; 
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { Toaster } from "@/components/ui/toaster";
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, type CombinedUser } from '@/contexts/AuthContext'; // Use CombinedUser
 import { Loader2, ShieldAlert } from 'lucide-react';
 
 export default function AdminLayout({
@@ -17,8 +17,11 @@ export default function AdminLayout({
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && (!currentUser || currentUser.role !== 'admin')) {
-      router.replace('/'); // Redirect to home if not admin or not logged in
+    if (!isLoading) {
+      // Check if user is logged in and if their Firestore data (with role) is available
+      if (!currentUser || !currentUser.firestoreData || currentUser.firestoreData.role !== 'admin') {
+        router.replace('/'); // Redirect to home if not admin or not logged in or Firestore data missing
+      }
     }
   }, [currentUser, isLoading, router]);
 
@@ -31,8 +34,8 @@ export default function AdminLayout({
     );
   }
 
-  if (!currentUser || currentUser.role !== 'admin') {
-    // This part might not be visible long due to redirect, but good fallback
+  // This check handles the case where isLoading is false but conditions are still not met
+  if (!currentUser || !currentUser.firestoreData || currentUser.firestoreData.role !== 'admin') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background text-center p-6">
         <ShieldAlert className="h-16 w-16 text-destructive mb-4" />

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useRegion } from '@/contexts/RegionContext';
 import { useAuth } from '@/contexts/AuthContext';
-// Removed Input and Popover as login is now a separate page
+import { useRouter } from 'next/navigation'; // useRouter needs 'use client'
 
 
 const navLinks = [
@@ -34,6 +34,7 @@ const Header = () => {
   const { selectedRegion, availableRegions, setSelectedRegionByCode } = useRegion();
   const { currentUser, isLoading: authLoading, logout } = useAuth();
   const itemCount = getItemCount();
+  const router = useRouter(); 
 
   const headerClasses = cn(
     "sticky top-0 z-50 bg-background shadow-none text-foreground"
@@ -53,21 +54,24 @@ const Header = () => {
     }
 
     if (currentUser) {
+      const userName = currentUser.firestoreData?.name || currentUser.displayName || currentUser.email;
+      const userEmail = currentUser.email;
+      const isAdmin = currentUser.firestoreData?.role === 'admin';
+
       return (
         <div className={cn("flex items-center", isMobile ? "flex-col space-y-2 items-start w-full" : "space-x-2")}>
-          <span className={cn("text-sm text-muted-foreground hidden md:inline", isMobile && "block text-base mb-1")}>
-             {currentUser.role === 'admin' && <Badge variant="destructive" className="mr-2">Admin</Badge>}
-             {currentUser.email}
+          <span className={cn("text-sm text-muted-foreground hidden md:inline truncate max-w-[150px]", isMobile && "block text-base mb-1")}>
+             {isAdmin && <Badge variant="destructive" className="mr-2">Admin</Badge>}
+             {userName || userEmail}
           </span>
            <UserCircle className={cn("h-6 w-6 text-primary md:hidden", isMobile && "mr-2 h-5 w-5 inline-block")} />
-          <Button variant={isMobile ? "outline" : "ghost"} size={isMobile ? "default" : "sm"} onClick={() => {logout(); setIsMobileMenuOpen(false);}} className={cn(isMobile && "w-full justify-start")}>
+          <Button variant={isMobile ? "outline" : "ghost"} size={isMobile ? "default" : "sm"} onClick={async () => {await logout(); setIsMobileMenuOpen(false); router.push('/'); router.refresh();}} className={cn(isMobile && "w-full justify-start")}>
             <LogOut className="mr-2 h-4 w-4" /> Logout
           </Button>
         </div>
       );
     }
 
-    // Login and Signup buttons
     return (
       <div className={cn("flex", isMobile ? "flex-col space-y-2 items-start w-full" : "space-x-2")}>
         <Button variant={isMobile ? "outline" : "ghost"} size={isMobile ? "default" : "sm"} asChild className={cn(isMobile && "w-full justify-start")}>
@@ -83,7 +87,6 @@ const Header = () => {
       </div>
     );
   };
-
 
   return (
     <header className={headerClasses}>
@@ -107,17 +110,19 @@ const Header = () => {
               </Link>
             </Button>
           ))}
-           <Button variant="ghost" asChild className={cn(linkClasses, "relative")}>
-            <Link href="/cart" className="flex items-center">
-              <ShoppingCart className="h-5 w-5 mr-1" />
-              Cart
-              {itemCount > 0 && (
-                <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
-                  {itemCount}
-                </Badge>
-              )}
-            </Link>
-          </Button>
+          {currentUser && ( // Only show cart if user is logged in
+            <Button variant="ghost" asChild className={cn(linkClasses, "relative")}>
+              <Link href="/cart" className="flex items-center">
+                <ShoppingCart className="h-5 w-5 mr-1" />
+                Cart
+                {itemCount > 0 && (
+                  <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                    {itemCount}
+                  </Badge>
+                )}
+              </Link>
+            </Button>
+          )}
           <div className="ml-2">
             <Select value={selectedRegion.code} onValueChange={setSelectedRegionByCode}>
               <SelectTrigger className="w-[180px] text-sm h-9">
@@ -140,17 +145,19 @@ const Header = () => {
 
         {/* Mobile Navigation */}
         <div className="md:hidden flex items-center space-x-2">
-           <Button variant="ghost" size="icon" asChild className={cn(iconButtonClasses, "relative")}>
-            <Link href="/cart">
-              <ShoppingCart className="h-6 w-6" />
-              {itemCount > 0 && (
-                 <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
-                  {itemCount}
-                </Badge>
-              )}
-              <span className="sr-only">Cart</span>
-            </Link>
-          </Button>
+          {currentUser && ( // Only show cart if user is logged in
+            <Button variant="ghost" size="icon" asChild className={cn(iconButtonClasses, "relative")}>
+              <Link href="/cart">
+                <ShoppingCart className="h-6 w-6" />
+                {itemCount > 0 && (
+                  <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                    {itemCount}
+                  </Badge>
+                )}
+                <span className="sr-only">Cart</span>
+              </Link>
+            </Button>
+          )}
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className={iconButtonClasses}>
@@ -170,11 +177,11 @@ const Header = () => {
                   </SheetClose>
               </SheetHeader>
               <nav className="flex flex-col space-y-3">
-                {currentUser && (
+                {currentUser && currentUser.firestoreData && ( // Show user info if logged in and data available
                   <div className="px-3 py-2 border-b mb-2">
-                      <p className="text-sm font-medium text-foreground">{currentUser.name}</p>
-                      <div className="text-xs text-muted-foreground"> {/* Changed from p to div */}
-                        {currentUser.email} {currentUser.role === 'admin' && <Badge variant="destructive" className="ml-1">Admin</Badge>}
+                      <p className="text-sm font-medium text-foreground truncate">{currentUser.firestoreData.name || currentUser.email}</p>
+                      <div className="text-xs text-muted-foreground">
+                        {currentUser.email} {currentUser.firestoreData.role === 'admin' && <Badge variant="destructive" className="ml-1">Admin</Badge>}
                       </div>
                   </div>
                 )}
@@ -183,26 +190,30 @@ const Header = () => {
                     <Link
                       href={link.href}
                       className="flex items-center py-3 px-3 text-lg text-card-foreground hover:bg-muted rounded-md transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
                     >
                       {link.icon && <span className="mr-3">{link.icon}</span>}
                       {link.label}
                     </Link>
                   </SheetClose>
                 ))}
-                <SheetClose asChild>
-                  <Link
-                    href="/cart"
-                    className="flex items-center py-3 px-3 text-lg text-card-foreground hover:bg-muted rounded-md transition-colors"
-                  >
-                    <ShoppingCart className="h-5 w-5 mr-3" />
-                    Cart
-                    {itemCount > 0 && (
-                      <Badge variant="default" className="ml-auto text-xs">
-                        {itemCount}
-                      </Badge>
-                    )}
-                  </Link>
-                </SheetClose>
+                {currentUser && ( // Only show cart link if user is logged in
+                  <SheetClose asChild>
+                    <Link
+                      href="/cart"
+                      className="flex items-center py-3 px-3 text-lg text-card-foreground hover:bg-muted rounded-md transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <ShoppingCart className="h-5 w-5 mr-3" />
+                      Cart
+                      {itemCount > 0 && (
+                        <Badge variant="default" className="ml-auto text-xs">
+                          {itemCount}
+                        </Badge>
+                      )}
+                    </Link>
+                  </SheetClose>
+                )}
                  <div className="px-3 pt-3 border-t mt-3">
                     <p className="text-sm text-muted-foreground mb-2">Region:</p>
                     <Select value={selectedRegion.code} onValueChange={(code) => {setSelectedRegionByCode(code); setIsMobileMenuOpen(false);}}>
@@ -232,3 +243,5 @@ const Header = () => {
 };
 
 export default Header;
+
+    

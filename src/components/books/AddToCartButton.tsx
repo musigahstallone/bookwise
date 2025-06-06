@@ -5,9 +5,10 @@ import type { Book } from '@/data/books';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
-import { useAuth } from '@/contexts/AuthContext'; // Added
-import { useToast } from '@/hooks/use-toast'; // Added
-import { useRouter } from 'next/navigation'; // Added
+import { useAuth } from '@/contexts/AuthContext'; 
+import { useToast } from '@/hooks/use-toast'; 
+import { useRouter } from 'next/navigation'; 
+import Link from 'next/link'; // For the link within the toast
 
 interface AddToCartButtonProps {
   book: Book;
@@ -15,20 +16,23 @@ interface AddToCartButtonProps {
 
 export default function AddToCartButton({ book }: AddToCartButtonProps) {
   const { addToCart } = useCart();
-  const { currentUser } = useAuth(); // Added
-  const { toast } = useToast(); // Added
-  const router = useRouter(); // Added
+  const { currentUser } = useAuth(); 
+  const { toast } = useToast(); 
+  const router = useRouter(); 
 
   const handleAddToCart = () => {
     if (!currentUser) {
       toast({
         title: 'Login Required',
-        description: 'Please log in to add items to your cart.',
-        action: (
-          <Button variant="outline" size="sm" onClick={() => router.push('/login')}>
-            Login
-          </Button>
+        description: (
+            <div className="flex flex-col gap-2">
+                <p>Please log in to add items to your cart.</p>
+                <Button variant="default" size="sm" asChild onClick={() => router.push('/login')}>
+                    <Link href="/login">Login</Link>
+                </Button>
+            </div>
         ),
+        duration: 5000, // Keep toast longer
       });
       return;
     }
@@ -42,4 +46,3 @@ export default function AddToCartButton({ book }: AddToCartButtonProps) {
     </Button>
   );
 }
-
