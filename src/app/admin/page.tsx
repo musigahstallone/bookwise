@@ -1,6 +1,6 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BookCopy, Users, BarChart3, AlertTriangle } from 'lucide-react';
+import { BookCopy, Users, BarChart3, AlertTriangle, Info } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { getAllBooksAdmin } from '@/lib/book-service'; // To get book count
@@ -9,9 +9,9 @@ export default function AdminDashboardPage() {
   const bookCount = getAllBooksAdmin().length;
 
   const stats = [
-    { title: 'Total Books', value: bookCount.toString(), icon: BookCopy, href: '/admin/books', description: 'Manage book catalog' },
-    { title: 'Total Users', value: 'N/A', icon: Users, description: 'Firebase Auth integration needed' },
-    { title: 'Sales Overview', value: 'N/A', icon: BarChart3, description: 'Firebase Firestore/Orders integration needed' },
+    { title: 'Total Books in Catalog', value: bookCount.toString(), icon: BookCopy, href: '/admin/books', description: 'Manage current book catalog' },
+    { title: 'Total Registered Users', value: 'N/A', icon: Users, description: 'Requires Firebase Authentication integration' },
+    { title: 'Sales Overview', value: 'N/A', icon: BarChart3, description: 'Requires Firebase Firestore for order data' },
   ];
 
   return (
@@ -43,7 +43,7 @@ export default function AdminDashboardPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Common administrative tasks.</CardDescription>
+          <CardDescription>Common administrative tasks for the book catalog.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-4">
           <Button asChild>
@@ -52,18 +52,26 @@ export default function AdminDashboardPage() {
           <Button variant="outline" asChild>
             <Link href="/admin/books">Manage Books</Link>
           </Button>
-          {/* Future quick actions can be added here */}
         </CardContent>
       </Card>
 
       <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-700 rounded-md">
-        <p className="font-bold flex items-center"><Users className="mr-2 h-5 w-5" />User & Sales Data Note:</p>
-        <p>Features like Total Users and Sales Overview require Firebase Authentication and Firestore (for order data) to be fully implemented. They are currently placeholders.</p>
+        <p className="font-bold flex items-center"><Info className="mr-2 h-5 w-5" />Placeholder Statistics:</p>
+        <p>Features like 'Total Registered Users' and 'Sales Overview' are placeholders. Full functionality requires further integration with Firebase services like Authentication (for user data) and Firestore (for order and sales data).</p>
       </div>
       
        <div className="mt-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
-        <p className="font-bold flex items-center"><AlertTriangle className="mr-2 h-5 w-5" />Developer Note (Data Persistence):</p>
-        <p>Book metadata modifications (add, edit, delete) made in this admin panel are for the current session only using local data structures. While PDF uploads persist in Firebase Storage, the book information itself (title, author, PDF URL link) will reset if the application server restarts or rebuilds. For full data persistence, integrate Firebase Firestore for book metadata.</p>
+        <p className="font-bold flex items-center"><AlertTriangle className="mr-2 h-5 w-5" />Important: Data Persistence Note</p>
+        <p>
+          - <strong className="text-green-700">PDF Files:</strong> Uploaded PDF files are persisted in Firebase Storage.
+        </p>
+        <p>
+          - <strong className="text-orange-700">Book Metadata:</strong> Information about books (title, author, description, category, price, and the link to the PDF in Firebase Storage) is currently managed in-memory for this session.
+          Modifications (add, edit, delete) made via this admin panel will **not persist** if the application server restarts or is rebuilt.
+        </p>
+        <p className="mt-2">
+          For full persistence of all book data, integration with a database like Firebase Firestore for book metadata is required.
+        </p>
       </div>
     </div>
   );
