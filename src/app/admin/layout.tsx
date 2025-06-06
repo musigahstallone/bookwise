@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { Toaster } from "@/components/ui/toaster";
-import { useAuth, type CombinedUser } from '@/contexts/AuthContext'; // Use CombinedUser
+import { useAuth, type CombinedUser } from '@/contexts/AuthContext';
 import { Loader2, ShieldAlert } from 'lucide-react';
 
 export default function AdminLayout({
@@ -18,23 +18,29 @@ export default function AdminLayout({
 
   useEffect(() => {
     if (!isLoading) {
-      // Check if user is logged in and if their Firestore data (with role) is available
       if (!currentUser || !currentUser.firestoreData || currentUser.firestoreData.role !== 'admin') {
-        router.replace('/'); // Redirect to home if not admin or not logged in or Firestore data missing
+        router.replace('/'); 
       }
     }
   }, [currentUser, isLoading, router]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-4 text-lg text-muted-foreground">Verifying access...</p>
-      </div>
+      <>
+        <div className="flex min-h-screen bg-background">
+          <AdminSidebar /> {/* Render sidebar structure */}
+          <main className="flex-1 p-6 md:p-8 overflow-auto flex items-center justify-center">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <p className="ml-4 text-lg text-muted-foreground">Verifying access...</p>
+          </main>
+        </div>
+        <Toaster />
+      </>
     );
   }
 
-  // This check handles the case where isLoading is false but conditions are still not met
+  // This check handles the case where isLoading is false but conditions are still not met for admin access
+  // It provides immediate feedback before the useEffect redirect fully occurs.
   if (!currentUser || !currentUser.firestoreData || currentUser.firestoreData.role !== 'admin') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background text-center p-6">
@@ -42,11 +48,13 @@ export default function AdminLayout({
         <h1 className="text-2xl font-bold text-destructive mb-2">Access Denied</h1>
         <p className="text-muted-foreground">You do not have permission to view this page.</p>
         <p className="text-sm text-muted-foreground mt-1">Redirecting...</p>
+        {/* Toaster might be useful here too if you want to show a toast on redirect */}
+        <Toaster /> 
       </div>
     );
   }
 
-  // If admin, render the admin layout
+  // If admin, render the full admin layout
   return (
     <>
       <div className="flex min-h-screen bg-background">
