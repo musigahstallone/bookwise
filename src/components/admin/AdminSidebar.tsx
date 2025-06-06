@@ -18,14 +18,17 @@ export default function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 bg-card text-card-foreground border-r border-border flex-shrink-0 p-4">
+    <aside className={cn(
+      "w-64 bg-card text-card-foreground border-r border-border flex-shrink-0 p-4",
+      "hidden md:flex flex-col" // Hide on mobile, show as flex column on md+
+    )}>
       <div className="mb-8">
         <Link href="/admin" className="flex items-center space-x-2 text-primary">
           <BookCopy className="h-8 w-8" />
           <h1 className="text-2xl font-headline font-bold">Admin Panel</h1>
         </Link>
       </div>
-      <nav className="space-y-2">
+      <nav className="space-y-2 flex-grow">
         {navItems.map((item) => (
           <Button
             key={item.label}
