@@ -7,7 +7,7 @@ import { countBooksInDb } from '@/lib/book-service-firebase';
 import { countUsersInDb } from '@/lib/user-service-firebase'; 
 import SeedDatabaseButton from '@/components/admin/SeedDatabaseButton';
 import { getDashboardStats } from '@/lib/stats-service-firebase';
-import ErrorDisplay from '@/components/layout/ErrorDisplay'; // New Import
+import ErrorDisplay from '@/components/layout/ErrorDisplay';
 import { revalidatePath } from 'next/cache';
 
 
@@ -21,10 +21,10 @@ export default async function AdminDashboardPage() {
 
   let firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   let generalFetchError: string | null = null;
+  let detailedErrorMessage: string | null = null;
 
   if (firebaseConfigured) {
     try {
-      // Fetch all stats in parallel
       const [
         books, 
         users,
@@ -42,10 +42,14 @@ export default async function AdminDashboardPage() {
       totalSalesAmount = dashboardStats.totalSalesAmount;
       totalOrders = dashboardStats.totalOrders;
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching dashboard data:", error);
-      generalFetchError = error instanceof Error ? error.message : "An unknown error occurred while fetching dashboard data.";
-      // Individual counts will remain 0 if fetching fails
+      generalFetchError = error.message || "An unknown error occurred while fetching dashboard data.";
+      if (error.message && error.message.includes("PERMISSION_DENIED")) {
+        detailedErrorMessage = "Access to fetch some dashboard data was denied by Firestore security rules. Please ensure the logged-in admin user has the correct 'admin' role set in their Firestore user document, and that Firestore security rules allow admins to read necessary collections (users, bookDownloads, orders). Server-side fetches from this page might not have the client's auth context for rule evaluation.";
+      } else {
+        detailedErrorMessage = generalFetchError;
+      }
     }
   }
 
@@ -79,7 +83,7 @@ export default async function AdminDashboardPage() {
       {firebaseConfigured && generalFetchError && (
          <ErrorDisplay 
           title="Error Loading Dashboard Data"
-          message={generalFetchError}
+          message={detailedErrorMessage || generalFetchError}
           retryAction={handleRetry}
         />
       )}
