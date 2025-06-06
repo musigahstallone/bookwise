@@ -1,11 +1,14 @@
 
+'use client';
+
 import type { Book } from '@/data/books';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge'; // Import Badge
-import { ArrowRight } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { ArrowRight, ShoppingCart } from 'lucide-react';
+import { useCart } from '@/contexts/CartContext';
 
 interface BookCardProps {
   book: Book;
@@ -13,12 +16,19 @@ interface BookCardProps {
 
 const BookCard: React.FC<BookCardProps> = ({ book }) => {
   const currentYear = new Date().getFullYear();
-  const isNew = book.publishedYear >= currentYear - 1; // Consider books from last year and this year as new
+  const isNew = book.publishedYear >= currentYear - 1;
+  const { addToCart } = useCart();
+
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent link navigation if card is wrapped in Link
+    e.stopPropagation();
+    addToCart(book);
+  };
 
   return (
     <Card className="flex flex-col overflow-hidden h-full shadow-lg hover:shadow-xl transition-shadow duration-300">
-      <CardHeader className="p-0 relative"> {/* Added relative positioning */}
-        <div className="aspect-[2/3] w-full relative">
+      <CardHeader className="p-0 relative">
+        <Link href={`/books/${book.id}`} className="block aspect-[2/3] w-full relative">
           <Image
             src={book.coverImageUrl}
             alt={book.title}
@@ -26,25 +36,34 @@ const BookCard: React.FC<BookCardProps> = ({ book }) => {
             objectFit="cover"
             data-ai-hint={book.dataAiHint || 'book cover'}
           />
-           {isNew && (
+          {isNew && (
             <Badge variant="default" className="absolute top-2 right-2 bg-primary text-primary-foreground shadow-md">
               NEW!
             </Badge>
           )}
-        </div>
+        </Link>
       </CardHeader>
       <CardContent className="p-4 flex-grow">
-        <CardTitle className="text-xl font-headline mb-1 line-clamp-2">{book.title}</CardTitle>
+        <CardTitle className="text-xl font-headline mb-1 line-clamp-2">
+          <Link href={`/books/${book.id}`} className="hover:underline">
+            {book.title}
+          </Link>
+        </CardTitle>
         <CardDescription className="text-sm text-muted-foreground mb-2">By {book.author}</CardDescription>
         <p className="text-sm line-clamp-3 mb-3">{book.description}</p>
       </CardContent>
-      <CardFooter className="p-4 pt-0 flex justify-between items-center">
-        <p className="text-lg font-bold text-primary">${book.price.toFixed(2)}</p>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/books/${book.id}`}>
-            View Details <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-        </Button>
+      <CardFooter className="p-4 pt-0 flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
+        <p className="text-lg font-bold text-primary order-1 sm:order-none">${book.price.toFixed(2)}</p>
+        <div className="flex space-x-2 order-2 sm:order-none w-full sm:w-auto justify-between sm:justify-end">
+          <Button asChild variant="outline" size="sm" className="flex-grow sm:flex-grow-0">
+            <Link href={`/books/${book.id}`}>
+              View <ArrowRight className="ml-1 h-4 w-4 hidden sm:inline" />
+            </Link>
+          </Button>
+          <Button variant="default" size="sm" onClick={handleAddToCart} className="flex-grow sm:flex-grow-0">
+            <ShoppingCart className="mr-1 h-4 w-4" /> Add
+          </Button>
+        </div>
       </CardFooter>
     </Card>
   );

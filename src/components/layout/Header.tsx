@@ -1,11 +1,13 @@
 
-'use client'; // Required for useState and Sheet component
+'use client'; 
 
 import Link from 'next/link';
-import { BookOpen, Sparkles, Menu, X } from 'lucide-react';
+import { BookOpen, Sparkles, Menu, X, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { useState } from 'react';
+import { useCart } from '@/contexts/CartContext';
+import { Badge } from '@/components/ui/badge';
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -15,6 +17,8 @@ const navLinks = [
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { getItemCount } = useCart();
+  const itemCount = getItemCount();
 
   return (
     <header className="bg-primary text-primary-foreground shadow-md sticky top-0 z-50">
@@ -34,10 +38,32 @@ const Header = () => {
               </Link>
             </Button>
           ))}
+           <Button variant="ghost" asChild className="text-base px-3 py-2 relative">
+            <Link href="/cart" className="hover:text-accent-foreground/80 transition-colors flex items-center">
+              <ShoppingCart className="h-5 w-5 mr-1" />
+              Cart
+              {itemCount > 0 && (
+                <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                  {itemCount}
+                </Badge>
+              )}
+            </Link>
+          </Button>
         </nav>
 
         {/* Mobile Navigation */}
-        <div className="md:hidden">
+        <div className="md:hidden flex items-center space-x-2">
+           <Button variant="ghost" size="icon" asChild className="relative">
+            <Link href="/cart">
+              <ShoppingCart className="h-6 w-6" />
+              {itemCount > 0 && (
+                <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                  {itemCount}
+                </Badge>
+              )}
+              <span className="sr-only">Cart</span>
+            </Link>
+          </Button>
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">
