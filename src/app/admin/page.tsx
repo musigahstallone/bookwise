@@ -1,10 +1,10 @@
 
 'use client'; // Convert to client component to use hooks for button interactions
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // Added useEffect
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BookCopy, Users, BarChart3, Info, Database, DownloadCloud, UserPlus, RefreshCw, ShoppingCart, History, PackageOpen } from 'lucide-react';
+import { BookCopy, Users, BarChart3, Info, Database, DownloadCloud, UserPlus, RefreshCw, ShoppingCart, History, PackageOpen, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -102,7 +102,7 @@ export default function AdminDashboardPage() {
       let generalError = error.message || "An unknown error occurred while fetching dashboard data.";
       let detailedMsg = generalError;
       if (error.message && error.message.includes("PERMISSION_DENIED")) {
-        detailedMsg = "Access to fetch some dashboard data was denied by Firestore security rules. Ensure the admin user has the 'admin' role and rules allow reading necessary collections.";
+        detailedMsg = "Access to fetch some dashboard data was denied by Firestore security rules. Ensure the admin user has the 'admin' role and rules allow reading necessary collections. You may need to manually set your role to 'admin' in Firestore for your user document.";
       }
       return {
         bookCount: 0, userCount: 0, newUsersToday: 0, totalDownloads: 0,
@@ -111,12 +111,12 @@ export default function AdminDashboardPage() {
     }
   };
   
-  useState(() => {
+  useEffect(() => { // Changed from useState initializer to useEffect for clarity
     fetchAllDashboardData().then(data => {
         setDashboardData(data);
         setIsInitialLoading(false);
     });
-  });
+  }, []); // Empty dependency array ensures this runs once on mount
 
 
   const handleReloadStats = async () => {
@@ -139,13 +139,21 @@ export default function AdminDashboardPage() {
     successTitle: string,
     errorTitle: string
   ) => async () => {
+    if (!firebaseConfigured) {
+      toast({ title: 'Firebase Not Configured', description: 'Cannot perform seeding actions.', variant: 'destructive' });
+      return;
+    }
     setLoadingStates(prev => ({ ...prev, [loadingKey]: true }));
     toast({ title: `Seeding ${loadingKey.replace('seeding', '')}...`, description: 'Please wait.' });
     const result = await action();
     if (result.success) {
       toast({ title: successTitle, description: result.message });
       // Optionally, refresh stats after seeding if relevant
-      if (loadingKey !== 'seedingBooks') await handleReloadStats();
+      if (loadingKey !== 'seedingBooks') await handleReloadStats(); // Refresh stats for non-book seeds
+      else { // For book seeding, also refresh book count specifically
+        const bookCountData = await countBooksInDb();
+        setDashboardData(prev => ({...prev, bookCount: bookCountData}));
+      }
     } else {
       toast({ title: errorTitle, description: result.message, variant: 'destructive' });
     }
@@ -199,6 +207,7 @@ export default function AdminDashboardPage() {
          <ErrorDisplay 
           title="Error Loading Dashboard Data"
           message={dashboardData.detailedErrorMessage || dashboardData.fetchError}
+          retryAction={handleReloadStats}
         />
       )}
 
