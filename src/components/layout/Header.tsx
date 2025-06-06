@@ -173,7 +173,9 @@ const Header = () => {
                 {currentUser && (
                   <div className="px-3 py-2 border-b mb-2">
                       <p className="text-sm font-medium text-foreground">{currentUser.name}</p>
-                      <p className="text-xs text-muted-foreground">{currentUser.email} {currentUser.role === 'admin' && <Badge variant="destructive" className="ml-1">Admin</Badge>}</p>
+                      <div className="text-xs text-muted-foreground"> {/* Changed from p to div */}
+                        {currentUser.email} {currentUser.role === 'admin' && <Badge variant="destructive" className="ml-1">Admin</Badge>}
+                      </div>
                   </div>
                 )}
                 {navLinks.map((link) => (
