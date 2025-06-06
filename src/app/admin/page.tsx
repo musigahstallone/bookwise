@@ -1,22 +1,22 @@
 
-'use client'; // Convert to client component to use hooks for button interactions
+'use client'; 
 
-import { useState, useEffect } from 'react'; // Added useEffect
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BookCopy, Users, BarChart3, Info, Database, DownloadCloud, UserPlus, RefreshCw, ShoppingCart, History, PackageOpen, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
+import { BookCopy, Users, BarChart3, Info, Database, DownloadCloud, UserPlus, RefreshCw, ShoppingCart, History, PackageOpen, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 
 import { countBooksInDb } from '@/lib/book-service-firebase';
 import { countUsersInDb } from '@/lib/user-service-firebase'; 
-import { handleSeedDatabase } from '@/lib/actions/bookActions'; // For books
+import { handleSeedDatabase } from '@/lib/actions/bookActions';
 import { 
   handleSeedUserCarts, 
   handleSeedBookDownloads, 
   handleSeedOrders 
-} from '@/lib/actions/trackingActions'; // For tracking data
+} from '@/lib/actions/trackingActions';
 import { getDashboardStats } from '@/lib/stats-service-firebase';
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
 import {
@@ -31,7 +31,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-// Re-fetch data on demand function type
 type FetchDashboardDataFunction = () => Promise<{
     bookCount: number;
     userCount: number;
@@ -43,8 +42,6 @@ type FetchDashboardDataFunction = () => Promise<{
     detailedErrorMessage: string | null;
 }>;
 
-
-// Define state for various loading states
 interface LoadingStates {
   seedingBooks: boolean;
   seedingCarts: boolean;
@@ -52,7 +49,6 @@ interface LoadingStates {
   seedingOrders: boolean;
   reloadingStats: boolean;
 }
-
 
 export default function AdminDashboardPage() {
   const { toast } = useToast();
@@ -87,23 +83,29 @@ export default function AdminDashboardPage() {
       };
     }
     try {
-      const [books, users, stats] = await Promise.all([
+      const [books, users, statsData] = await Promise.all([
         countBooksInDb(),
         countUsersInDb(),
         getDashboardStats()
       ]);
       return {
-        bookCount: books, userCount: users, newUsersToday: stats.newUsersToday,
-        totalDownloads: stats.totalDownloads, totalSalesAmount: stats.totalSalesAmount,
-        totalOrders: stats.totalOrders, fetchError: null, detailedErrorMessage: null
+        bookCount: books, userCount: users, newUsersToday: statsData.newUsersToday,
+        totalDownloads: statsData.totalDownloads, totalSalesAmount: statsData.totalSalesAmount,
+        totalOrders: statsData.totalOrders, fetchError: null, detailedErrorMessage: null
       };
     } catch (error: any) {
       console.error("Error fetching dashboard data:", error);
-      let generalError = error.message || "An unknown error occurred while fetching dashboard data.";
+      let generalError = "An unknown error occurred while fetching dashboard data.";
       let detailedMsg = generalError;
-      if (error.message && error.message.includes("PERMISSION_DENIED")) {
-        detailedMsg = "Access to fetch some dashboard data was denied by Firestore security rules. Ensure the admin user has the 'admin' role and rules allow reading necessary collections. You may need to manually set your role to 'admin' in Firestore for your user document.";
+
+      if (error.message) {
+        generalError = error.message;
+        detailedMsg = error.message;
+        if (error.message.includes("PERMISSION_DENIED")) {
+            detailedMsg = "Access to fetch some dashboard data was denied by Firestore security rules. Ensure the admin user has the 'admin' role and rules allow reading necessary collections. You may need to manually set your role to 'admin' in Firestore for your user document.";
+        }
       }
+      
       return {
         bookCount: 0, userCount: 0, newUsersToday: 0, totalDownloads: 0,
         totalSalesAmount: 0, totalOrders: 0, fetchError: generalError, detailedErrorMessage: detailedMsg
@@ -111,12 +113,12 @@ export default function AdminDashboardPage() {
     }
   };
   
-  useEffect(() => { // Changed from useState initializer to useEffect for clarity
+  useEffect(() => {
     fetchAllDashboardData().then(data => {
         setDashboardData(data);
         setIsInitialLoading(false);
     });
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, []);
 
 
   const handleReloadStats = async () => {
@@ -131,7 +133,6 @@ export default function AdminDashboardPage() {
     }
     setLoadingStates(prev => ({ ...prev, reloadingStats: false }));
   };
-
 
   const createSeedHandler = (
     action: () => Promise<{ success: boolean; message?: string }>,
@@ -148,12 +149,7 @@ export default function AdminDashboardPage() {
     const result = await action();
     if (result.success) {
       toast({ title: successTitle, description: result.message });
-      // Optionally, refresh stats after seeding if relevant
-      if (loadingKey !== 'seedingBooks') await handleReloadStats(); // Refresh stats for non-book seeds
-      else { // For book seeding, also refresh book count specifically
-        const bookCountData = await countBooksInDb();
-        setDashboardData(prev => ({...prev, bookCount: bookCountData}));
-      }
+      await handleReloadStats(); // Refresh all stats after any successful seed
     } else {
       toast({ title: errorTitle, description: result.message, variant: 'destructive' });
     }
@@ -162,18 +158,20 @@ export default function AdminDashboardPage() {
 
   const handleSeedBooks = createSeedHandler(handleSeedDatabase, 'seedingBooks', 'Books Seeded!', 'Error Seeding Books');
   const handleSeedCartsAction = createSeedHandler(handleSeedUserCarts, 'seedingCarts', 'User Carts Seeded!', 'Error Seeding Carts');
-  const handleSeedDownloadsAction = createSeedHandler(handleSeedBookDownloads, 'seedingDownloads', 'Book Downloads Seeded!', 'Error Seeding Downloads');
-  const handleSeedOrdersAction = createSeedHandler(handleSeedOrders, 'seedingOrders', 'Orders Seeded!', 'Error Seeding Orders');
+  const handleSeedDownloadsAction = createSeedHandler(handleSeedBookDownloads, 'seedingDownloads', 'Download History Seeded!', 'Error Seeding Downloads');
+  const handleSeedOrdersAction = createSeedHandler(handleSeedOrders, 'seedingOrders', 'Order History Seeded!', 'Error Seeding Orders');
 
+  const salesAmountDisplay = typeof dashboardData.totalSalesAmount === 'number' 
+    ? dashboardData.totalSalesAmount.toFixed(2) 
+    : '0.00';
 
   const stats = [
     { title: 'Total Books in Catalog', value: firebaseConfigured ? dashboardData.bookCount.toString() : 'N/A', icon: BookCopy, href: '/admin/books', description: 'Manage current book catalog' },
     { title: 'Total Registered Users', value: firebaseConfigured ? dashboardData.userCount.toString() : 'N/A', icon: Users, href: '/admin/users', description: 'View registered users' },
     { title: 'New Users (Today)', value: firebaseConfigured ? dashboardData.newUsersToday.toString() : 'N/A', icon: UserPlus, description: 'Users signed up today' },
     { title: 'Total Downloads', value: firebaseConfigured ? dashboardData.totalDownloads.toString() : 'N/A', icon: DownloadCloud, description: 'Total book PDF downloads recorded' },
-    { title: 'Sales Overview', value: firebaseConfigured ? `$${dashboardData.totalSalesAmount.toFixed(2)} (${dashboardData.totalOrders} orders)` : 'N/A', icon: BarChart3, description: 'Mock sales data from orders' },
+    { title: 'Sales Overview', value: firebaseConfigured ? `$${salesAmountDisplay} (${dashboardData.totalOrders} orders)` : 'N/A', icon: BarChart3, description: 'Mock sales data from orders' },
   ];
-
 
   if (isInitialLoading && firebaseConfigured) {
     return (
@@ -184,7 +182,6 @@ export default function AdminDashboardPage() {
     );
   }
   
-
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -278,7 +275,7 @@ export default function AdminDashboardPage() {
                         <AlertDialogHeader>
                         <AlertDialogTitle>Seed User Carts?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will add mock cart items to users found by email from `src/data/mock-tracking-data.ts`.
+                            This will add mock cart items from `src/data/mock-tracking-data.ts` to users found by email.
                         </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -362,15 +359,15 @@ export default function AdminDashboardPage() {
         <p className="font-bold flex items-center"><Info className="mr-2 h-5 w-5" />Authentication & Tracking Note:</p>
         <p>- Authentication is handled by Firebase Authentication (Email/Password).</p>
         <p>- Admin panel access requires a user to be logged in and have their 'role' field in Firestore set to 'admin'.</p>
-        <p>- User-specific carts are now stored in Firestore under each user's profile.</p>
-        <p>- Download and (mock) sales tracking are active.</p>
+        <p>- User-specific carts are stored in Firestore under each user's profile.</p>
+        <p>- Download and (mock) sales tracking are active. Seed corresponding data using the buttons above.</p>
       </div>
       
        <div className="mt-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
         <p className="font-bold flex items-center"><AlertTriangle className="mr-2 h-5 w-5" />Important: Data Persistence Note</p>
         <p>- <strong className="text-green-700">PDF & Cover Image Files:</strong> Uploaded files are persisted in Firebase Storage.</p>
         <p>- <strong className="text-green-700">Book, User, Cart, Order, Download Metadata:</strong> Information is managed in Firebase Firestore and will persist.</p>
-        <p className="mt-2">- The "Seed Database" actions populate their respective collections. Users are created via signup.</p>
+        <p className="mt-2">- The "Seed Database" actions populate their respective collections. Users are created via signup. Tracking data can be seeded via the new buttons.</p>
       </div>
     </div>
   );
