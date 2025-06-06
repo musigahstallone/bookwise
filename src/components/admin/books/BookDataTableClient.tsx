@@ -44,18 +44,16 @@ export default function BookDataTableClient({ initialBooks }: BookDataTableClien
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
 
-  // Update local state if initialBooks prop changes (e.g., after seeding)
   useEffect(() => {
     setBooks(initialBooks);
-    // Reset to page 1 if book list changes significantly (e.g., after seeding)
-    // A more sophisticated check might be needed if live updates are frequent
     const newTotalPages = Math.ceil(initialBooks.length / BOOKS_PER_PAGE);
     if (currentPage > newTotalPages && newTotalPages > 0) {
         setCurrentPage(newTotalPages);
-    } else if (newTotalPages === 0) {
+    } else if (newTotalPages === 0 && initialBooks.length === 0) { // Ensure page 1 if no books
+        setCurrentPage(1);
+    } else if (currentPage === 0 && newTotalPages > 0) { // Ensure currentPage is at least 1
         setCurrentPage(1);
     }
-
   }, [initialBooks, currentPage]);
 
 
@@ -69,16 +67,17 @@ export default function BookDataTableClient({ initialBooks }: BookDataTableClien
     setIsDeleting(true);
     toast({ title: 'Deleting Book...', description: `Attempting to delete "${bookToDelete.title}".` });
     
-    const result = await handleDeleteBook(bookToDelete.id, bookToDelete.pdfUrl); // Pass pdfUrl
+    // Pass pdfUrl and coverImageUrl to the server action
+    const result = await handleDeleteBook(bookToDelete.id, bookToDelete.pdfUrl, bookToDelete.coverImageUrl);
 
     if (result.success) {
       toast({ title: 'Success', description: result.message });
       setBooks(prevBooks => prevBooks.filter(b => b.id !== bookToDelete.id));
-      // Adjust current page if the last item on a page was deleted
-      const newTotalPages = Math.ceil((books.length - 1) / BOOKS_PER_PAGE);
+      const newBooksCount = books.length - 1;
+      const newTotalPages = Math.ceil(newBooksCount / BOOKS_PER_PAGE);
       if (currentPage > newTotalPages && newTotalPages > 0) {
         setCurrentPage(newTotalPages);
-      } else if (newTotalPages === 0) {
+      } else if (newBooksCount === 0) { // if all books are deleted
         setCurrentPage(1);
       }
     } else {
@@ -90,12 +89,15 @@ export default function BookDataTableClient({ initialBooks }: BookDataTableClien
   };
 
   const sortedBooks = useMemo(() => {
+    // Ensure books is an array before sorting
+    if (!Array.isArray(books)) return [];
     return [...books].sort((a,b) => a.title.localeCompare(b.title));
   }, [books]);
 
   const totalPages = Math.ceil(sortedBooks.length / BOOKS_PER_PAGE);
 
   const paginatedBooks = useMemo(() => {
+    if (!Array.isArray(sortedBooks)) return [];
     const startIndex = (currentPage - 1) * BOOKS_PER_PAGE;
     const endIndex = startIndex + BOOKS_PER_PAGE;
     return sortedBooks.slice(startIndex, endIndex);
@@ -107,10 +109,9 @@ export default function BookDataTableClient({ initialBooks }: BookDataTableClien
   }, []);
 
 
-  if (!initialBooks && !books.length) { // Check if initialBooks was undefined/empty and local books empty
+  if (!initialBooks && books.length === 0) {
     return <p>Loading books or Firebase not configured...</p>;
   }
-
 
   if (books.length === 0) {
     return <p>No books found in Firestore. <Link href="/admin/books/add" className="text-primary hover:underline">Add a new book</Link>.</p>;
@@ -141,6 +142,7 @@ export default function BookDataTableClient({ initialBooks }: BookDataTableClien
                      height={40} 
                      className="rounded object-cover aspect-square" 
                      data-ai-hint={book.dataAiHint || 'book cover small'}
+                     unoptimized={book.coverImageUrl?.includes('firebasestorage.googleapis.com')} // Add this if you have issues with Firebase Storage URLs and Next/Image optimization
                    />
                 </TableCell>
                 <TableCell className="font-medium">
@@ -154,7 +156,7 @@ export default function BookDataTableClient({ initialBooks }: BookDataTableClien
                 <TableCell className="text-center">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0" disabled={isDeleting}>
+                      <Button variant="ghost" className="h-8 w-8 p-0" disabled={isDeleting && bookToDelete?.id === book.id}>
                         <span className="sr-only">Open menu</span>
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
@@ -165,7 +167,11 @@ export default function BookDataTableClient({ initialBooks }: BookDataTableClien
                           <Edit className="mr-2 h-4 w-4" /> Edit
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDeleteConfirmation(book)} className="flex items-center text-destructive hover:!text-destructive cursor-pointer">
+                      <DropdownMenuItem 
+                        onClick={() => handleDeleteConfirmation(book)} 
+                        className="flex items-center text-destructive hover:!text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
+                        disabled={isDeleting && bookToDelete?.id === book.id}
+                       >
                         {isDeleting && bookToDelete?.id === book.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                          Delete
                       </DropdownMenuItem>
@@ -192,7 +198,7 @@ export default function BookDataTableClient({ initialBooks }: BookDataTableClien
               <AlertDialogTitle>Are you sure?</AlertDialogTitle>
               <AlertDialogDescription>
                 This action will permanently delete the book "{bookToDelete.title}" from Firestore
-                {bookToDelete.pdfUrl && bookToDelete.pdfUrl.includes('firebasestorage.googleapis.com') ? ' and its associated PDF from Firebase Storage.' : '.'}
+                {(bookToDelete.pdfUrl && bookToDelete.pdfUrl.includes('firebasestorage.googleapis.com')) || (bookToDelete.coverImageUrl && bookToDelete.coverImageUrl.includes('firebasestorage.googleapis.com')) ? ' and its associated files from Firebase Storage.' : '.'}
                 This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>

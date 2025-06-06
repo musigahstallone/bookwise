@@ -12,11 +12,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useRouter } from 'next/navigation';
 import type { Book } from '@/data/books';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UploadCloud, AlertTriangle } from 'lucide-react';
+import { Loader2, UploadCloud, AlertTriangle, ImagePlus, FileText } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { storage } from '@/lib/firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { handleAddBook, handleUpdateBook } from '@/lib/actions/bookActions'; // Use Server Actions
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { handleAddBook, handleUpdateBook } from '@/lib/actions/bookActions';
+import Image from 'next/image';
 
 const currentYear = new Date().getFullYear();
 
@@ -27,20 +28,16 @@ const bookFormSchema = z.object({
   description: z.string().min(10, { message: 'Short description must be at least 10 characters.' }),
   longDescription: z.string().optional(),
   price: z.coerce.number().min(0, { message: 'Price must be a positive number.' }),
-  coverImageUrl: z.string().url({ message: 'Please enter a valid URL for the cover image.' }).default('https://placehold.co/300x300.png'),
-  pdfUrl: z.preprocess(
-    (val) => (val === "" ? undefined : val), // Transform empty string to undefined
-    z.string().url({ message: 'Please enter a valid URL for the PDF or upload a file.' }).optional().default('/pdfs/placeholder-book.pdf')
-  ),
   pdfFile: z.instanceof(File).optional().nullable(),
-  dataAiHint: z.string().optional().default('book cover'),
+  coverImageFile: z.instanceof(File).optional().nullable(),
+  dataAiHint: z.string().max(50, "AI Hint too long. Max 2 words recommended.").optional().default('book cover'),
   publishedYear: z.coerce.number().int().min(1000, { message: 'Enter a valid year.' }).max(currentYear + 5, { message: `Year cannot be too far in the future.`}),
 });
 
 export type BookFormValues = z.infer<typeof bookFormSchema>;
 
 interface BookFormProps {
-  bookToEdit?: Book | null; // Passed from server component if editing
+  bookToEdit?: Book | null;
   bookId?: string;
 }
 
@@ -48,8 +45,14 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [pdfFileName, setPdfFileName] = useState<string | null>(null);
+  const [coverFileName, setCoverFileName] = useState<string | null>(null);
+  const [currentCoverImageUrl, setCurrentCoverImageUrl] = useState<string | null>(bookToEdit?.coverImageUrl || 'https://placehold.co/300x300.png');
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
+
+
   const isEditMode = !!bookId && !!bookToEdit;
   const firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 
@@ -59,8 +62,8 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
         ...bookToEdit,
         longDescription: bookToEdit.longDescription || '',
         dataAiHint: bookToEdit.dataAiHint || 'book cover',
-        pdfFile: null, // Reset pdfFile on edit mode load
-        // pdfUrl will be from bookToEdit or default from schema if bookToEdit.pdfUrl is undefined/empty after preprocess
+        pdfFile: null,
+        coverImageFile: null,
       } : {
       title: '',
       author: '',
@@ -68,9 +71,8 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
       description: '',
       longDescription: '',
       price: 0,
-      coverImageUrl: 'https://placehold.co/300x300.png',
-      pdfUrl: '/pdfs/placeholder-book.pdf', // Initial default, schema default will also apply
       pdfFile: null,
+      coverImageFile: null,
       dataAiHint: 'book cover',
       publishedYear: new Date().getFullYear(),
     },
@@ -82,46 +84,83 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
         ...bookToEdit,
         longDescription: bookToEdit.longDescription || '',
         dataAiHint: bookToEdit.dataAiHint || 'book cover',
-        pdfFile: null, // Ensure pdfFile is null when resetting for edit
-        pdfUrl: bookToEdit.pdfUrl || '/pdfs/placeholder-book.pdf', // Explicitly set pdfUrl
+        pdfFile: null,
+        coverImageFile: null,
       });
-      if (bookToEdit.pdfUrl && !bookToEdit.pdfUrl.startsWith('/pdfs/placeholder-book.pdf') && bookToEdit.pdfUrl.includes('firebasestorage.googleapis.com')) {
+      setCurrentCoverImageUrl(bookToEdit.coverImageUrl || 'https://placehold.co/300x300.png');
+      setCoverPreviewUrl(null); // Clear file preview when resetting form for edit
+
+      if (bookToEdit.pdfUrl && bookToEdit.pdfUrl.includes('firebasestorage.googleapis.com')) {
         try {
           const url = new URL(bookToEdit.pdfUrl);
           const pathParts = url.pathname.split('/');
           const encodedFileName = pathParts[pathParts.length - 1];
-          // More robust decoding for names like book_pdfs%2FThe%20Midnight%20Library.pdf
           const decodedFileNameWithFolder = decodeURIComponent(encodedFileName);
           const actualFileName = decodedFileNameWithFolder.substring(decodedFileNameWithFolder.indexOf('/') + 1);
-          setFileName(actualFileName.split('?')[0]);
-        } catch (e) {
-          console.error("Error parsing filename from PDF URL:", e);
-          setFileName('Uploaded PDF'); 
-        }
-      } else if (bookToEdit.pdfUrl && bookToEdit.pdfUrl.startsWith('/pdfs/')) {
-        setFileName(null); // It's a placeholder, no file name to show
+          setPdfFileName(actualFileName.split('?')[0]);
+        } catch (e) { setPdfFileName('Uploaded PDF'); }
       } else {
-        setFileName(null);
+        setPdfFileName(null);
       }
+
+      if (bookToEdit.coverImageUrl && bookToEdit.coverImageUrl.includes('firebasestorage.googleapis.com')) {
+         try {
+          const url = new URL(bookToEdit.coverImageUrl);
+          const pathParts = url.pathname.split('/');
+          const encodedFileName = pathParts[pathParts.length - 1];
+          const decodedFileNameWithFolder = decodeURIComponent(encodedFileName);
+          const actualFileName = decodedFileNameWithFolder.substring(decodedFileNameWithFolder.indexOf('/') + 1);
+          setCoverFileName(actualFileName.split('?')[0] || 'Uploaded Cover');
+        } catch (e) { setCoverFileName('Uploaded Cover'); }
+      } else {
+        setCoverFileName(null);
+      }
+
+    } else {
+        setCurrentCoverImageUrl('https://placehold.co/300x300.png');
+        setCoverPreviewUrl(null);
+        setPdfFileName(null);
+        setCoverFileName(null);
     }
   }, [bookId, isEditMode, bookToEdit, form]);
 
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePdfFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       form.setValue('pdfFile', file);
-      setFileName(file.name);
-      // Clear pdfUrl input to ensure its validation doesn't interfere if it held an invalid manual entry.
-      // The preprocess in schema will turn this empty string into undefined, then default applies.
-      form.setValue('pdfUrl', ''); 
+      setPdfFileName(file.name);
     } else {
       form.setValue('pdfFile', null);
-      setFileName(null);
-      // If file is removed, user might want to enter a URL or rely on existing/default.
-      // We don't reset pdfUrl here to allow manual input if desired.
+      setPdfFileName(isEditMode && bookToEdit?.pdfUrl ? 'Using existing PDF' : null);
     }
   };
+
+  const handleCoverFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      form.setValue('coverImageFile', file);
+      setCoverFileName(file.name);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCoverPreviewUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      form.setValue('coverImageFile', null);
+      setCoverFileName(isEditMode && bookToEdit?.coverImageUrl ? 'Using existing cover' : null);
+      setCoverPreviewUrl(null); // Clear preview if file is removed
+    }
+  };
+  
+  const uploadFileToStorage = async (file: File, pathPrefix: string): Promise<string> => {
+    const safeFileName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
+    const uniqueFileName = `${pathPrefix}/${Date.now()}-${safeFileName}`;
+    const fileRef = storageRef(storage, uniqueFileName);
+    await uploadBytes(fileRef, file);
+    return getDownloadURL(fileRef);
+  };
+
 
   const onSubmit: SubmitHandler<BookFormValues> = async (data) => {
     if (!firebaseConfigured) {
@@ -129,47 +168,54 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
         return;
     }
     setIsLoading(true);
-    setIsUploading(false);
-    
-    // data.pdfUrl is now the value after Zod processing (preprocessing, url validation if applicable, optional, default)
-    let finalPdfUrl = data.pdfUrl; 
+    let finalPdfUrl = isEditMode ? bookToEdit?.pdfUrl : '/pdfs/placeholder-book.pdf';
+    let finalCoverImageUrl = isEditMode ? bookToEdit?.coverImageUrl : 'https://placehold.co/300x300.png';
 
+    // Upload PDF
     if (data.pdfFile) {
-      setIsUploading(true);
-      toast({ title: 'Uploading PDF...', description: 'Please wait while the PDF is being uploaded to Firebase Storage.' });
+      setIsUploadingPdf(true);
+      toast({ title: 'Uploading PDF...', description: 'Please wait.' });
       try {
-        const file = data.pdfFile;
-        // Sanitize filename for Firebase Storage (replace spaces, etc.)
-        const safeFileName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
-        const uniqueFileName = `book_pdfs/${Date.now()}-${safeFileName}`;
-        const fileRef = storageRef(storage, uniqueFileName);
-        await uploadBytes(fileRef, file);
-        finalPdfUrl = await getDownloadURL(fileRef);
-        toast({ title: 'Upload Successful', description: 'PDF uploaded to Firebase Storage.' });
+        finalPdfUrl = await uploadFileToStorage(data.pdfFile, 'book_pdfs');
+        toast({ title: 'PDF Upload Successful', description: 'PDF ready.' });
       } catch (error) {
-        console.error('Error uploading PDF to Firebase Storage:', error);
-        toast({ title: 'Upload Failed', description: 'Could not upload PDF. Check console for details.', variant: 'destructive' });
-        setIsLoading(false);
-        setIsUploading(false);
+        console.error('Error uploading PDF:', error);
+        toast({ title: 'PDF Upload Failed', description: String(error), variant: 'destructive' });
+        setIsLoading(false); setIsUploadingPdf(false);
         return;
       }
-      setIsUploading(false);
-    }
-    
-    // If finalPdfUrl is still undefined/empty here (e.g. default didn't apply as expected, or it was cleared and no upload)
-    // ensure it falls back to the absolute default. This should be rare with the preprocess + default.
-    if (!finalPdfUrl) {
-        finalPdfUrl = '/pdfs/placeholder-book.pdf';
+      setIsUploadingPdf(false);
     }
 
-    const bookDataToSave = { ...data, pdfUrl: finalPdfUrl };
-    const { pdfFile, ...bookDataForAction } = bookDataToSave;
+    // Upload Cover Image
+    if (data.coverImageFile) {
+      setIsUploadingCover(true);
+      toast({ title: 'Uploading Cover Image...', description: 'Please wait.' });
+      try {
+        finalCoverImageUrl = await uploadFileToStorage(data.coverImageFile, 'book_covers');
+        toast({ title: 'Cover Image Upload Successful', description: 'Cover image ready.' });
+      } catch (error) {
+        console.error('Error uploading cover image:', error);
+        toast({ title: 'Cover Image Upload Failed', description: String(error), variant: 'destructive' });
+        setIsLoading(false); setIsUploadingCover(false);
+        return;
+      }
+      setIsUploadingCover(false);
+    }
+    
+    const bookDataForAction = {
+      ...data,
+      pdfUrl: finalPdfUrl!, // Assert non-null as it will have a default or uploaded value
+      coverImageUrl: finalCoverImageUrl!, // Assert non-null
+    };
+    
+    const { pdfFile, coverImageFile, ...actionPayload } = bookDataForAction;
 
     let result;
     if (isEditMode && bookId) {
-      result = await handleUpdateBook(bookId, bookDataForAction as Partial<Omit<Book, 'id'>>);
+      result = await handleUpdateBook(bookId, actionPayload as Partial<Omit<Book, 'id'>>);
     } else {
-      result = await handleAddBook(bookDataForAction as Omit<Book, 'id'>);
+      result = await handleAddBook(actionPayload as Omit<Book, 'id'>);
     }
 
     if (result.success) {
@@ -206,6 +252,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
     );
   }
 
+  const displayCoverUrl = coverPreviewUrl || currentCoverImageUrl;
 
   return (
     <Card className="shadow-xl">
@@ -218,14 +265,9 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                 <AlertTriangle size={16}/> Firebase not configured. Changes might not save correctly.
             </CardDescription>
         )}
-         {firebaseConfigured && !isEditMode && (
+         {firebaseConfigured && (
              <CardDescription className="pt-2 text-sm text-muted-foreground">
-                Ensure Firebase is configured in <code>.env.local</code> for PDF uploads and data persistence.
-            </CardDescription>
-        )}
-         {firebaseConfigured && isEditMode && bookToEdit && (
-             <CardDescription className="pt-2 text-sm text-muted-foreground">
-                Modifying book details for: <span className="font-semibold">{bookToEdit.title}</span>
+                {isEditMode && bookToEdit ? `Modifying: ${bookToEdit.title}` : 'Upload book PDF and cover image directly.'}
             </CardDescription>
         )}
       </CardHeader>
@@ -313,14 +355,35 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                 )}
                 />
             </div>
+            
             <FormField
               control={form.control}
-              name="coverImageUrl"
-              render={({ field }) => (
+              name="coverImageFile"
+              render={({ field }) => ( 
                 <FormItem>
-                  <FormLabel>Cover Image URL</FormLabel>
-                  <FormControl><Input placeholder="https://example.com/cover.jpg" {...field} /></FormControl>
-                  <FormDescription>Use a square image (e.g., 300x300) for best results. Default: https://placehold.co/300x300.png</FormDescription>
+                  <FormLabel>Cover Image File</FormLabel>
+                   {displayCoverUrl && (
+                    <div className="mt-2 mb-2 w-32 h-32 relative border rounded overflow-hidden">
+                      <Image src={displayCoverUrl} alt="Cover preview" layout="fill" objectFit="cover" data-ai-hint="book cover form preview"/>
+                    </div>
+                  )}
+                  <FormControl>
+                    <div className="flex items-center space-x-2">
+                       <label htmlFor="cover-image-upload" className="cursor-pointer inline-flex items-center px-4 py-2 border border-input bg-background rounded-md text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground">
+                        <ImagePlus className="mr-2 h-4 w-4" />
+                        {coverFileName ? 'Change Cover' : 'Choose Cover Image'}
+                      </label>
+                      <Input 
+                        id="cover-image-upload"
+                        type="file" 
+                        accept="image/png, image/jpeg, image/webp"
+                        onChange={handleCoverFileChange}
+                        className="hidden"
+                      />
+                      {coverFileName && <span className="text-sm text-muted-foreground truncate max-w-xs">{coverFileName}</span>}
+                    </div>
+                  </FormControl>
+                  <FormDescription>Upload the book's cover image (PNG, JPG, WEBP). Square images (e.g., 300x300) work best. Max 5MB recommended.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -329,41 +392,26 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
             <FormField
               control={form.control}
               name="pdfFile"
-              // `field` doesn't include `onChange` in the way RHF expects for file inputs directly
-              // So we handle it manually via `handleFileChange`
-              render={({ field: { value, ...restField } }) => ( 
+              render={() => ( 
                 <FormItem>
                   <FormLabel>Book PDF File</FormLabel>
                   <FormControl>
                     <div className="flex items-center space-x-2">
                        <label htmlFor="pdf-upload" className="cursor-pointer inline-flex items-center px-4 py-2 border border-input bg-background rounded-md text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground">
-                        <UploadCloud className="mr-2 h-4 w-4" />
-                        {fileName ? 'Change PDF' : 'Choose PDF'}
+                        <FileText className="mr-2 h-4 w-4" />
+                        {pdfFileName ? 'Change PDF' : 'Choose PDF'}
                       </label>
                       <Input 
                         id="pdf-upload"
                         type="file" 
                         accept=".pdf"
-                        onChange={handleFileChange} // Manually handled
+                        onChange={handlePdfFileChange}
                         className="hidden"
-                        // We don't spread `...restField` directly here because `onChange` is special for files
                       />
-                      {fileName && <span className="text-sm text-muted-foreground truncate max-w-xs">{fileName}</span>}
+                      {pdfFileName && <span className="text-sm text-muted-foreground truncate max-w-xs">{pdfFileName}</span>}
                     </div>
                   </FormControl>
                   <FormDescription>Upload the book's PDF file. This will be stored in Firebase Storage. Max 50MB recommended.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-             <FormField
-              control={form.control}
-              name="pdfUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Or Enter PDF URL Manually</FormLabel>
-                  <FormControl><Input placeholder="/pdfs/placeholder-book.pdf OR https://existing-url.com/book.pdf" {...field} disabled={!!form.watch('pdfFile')} /></FormControl>
-                  <FormDescription>If not uploading, you can provide a direct URL to the PDF. This field is disabled if a file is chosen for upload. If left blank and no file uploaded, default placeholder PDF will be used for new books.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -376,18 +424,18 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                 <FormItem>
                   <FormLabel>AI Hint for Cover Image (Optional)</FormLabel>
                   <FormControl><Input placeholder="e.g., fantasy dragon" {...field} value={field.value ?? ''} /></FormControl>
-                  <FormDescription>One or two keywords for AI image generation if applicable. Max two words. Default: book cover</FormDescription>
+                  <FormDescription>One or two keywords for AI image generation if applicable (max 2 words). Default: book cover</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <div className="flex space-x-3 justify-end pt-4">
-              <Button type="button" variant="outline" onClick={() => router.back()} disabled={isLoading || isUploading}>
+              <Button type="button" variant="outline" onClick={() => router.back()} disabled={isLoading || isUploadingPdf || isUploadingCover}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isLoading || isUploading || !firebaseConfigured} className="bg-primary hover:bg-primary/90">
-                {(isLoading || isUploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isUploading ? 'Uploading...' : (isEditMode ? 'Save Changes' : 'Add Book')}
+              <Button type="submit" disabled={isLoading || isUploadingPdf || isUploadingCover || !firebaseConfigured} className="bg-primary hover:bg-primary/90">
+                {(isLoading || isUploadingPdf || isUploadingCover) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isUploadingPdf ? 'Uploading PDF...' : isUploadingCover ? 'Uploading Cover...' : (isEditMode ? 'Save Changes' : 'Add Book')}
               </Button>
             </div>
           </form>
@@ -396,4 +444,3 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
     </Card>
   );
 }
-
