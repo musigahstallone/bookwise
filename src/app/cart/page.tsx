@@ -53,7 +53,9 @@ export default function CartPage() {
         bookId: item.id,
         title: item.title,
         price: item.price, // Price at time of purchase
-        // quantity is implicitly 1
+        coverImageUrl: item.coverImageUrl,
+        pdfUrl: item.pdfUrl,
+        dataAiHint: item.dataAiHint || 'book cover',
     }));
 
     try {
@@ -68,10 +70,11 @@ export default function CartPage() {
 
       if (orderResult.success) {
         // Store simplified items for order summary display
-        const purchasedItemsForSummary = cartItems.map(item => ({
-            id: item.id,
+        // These items now include pdfUrl and coverImageUrl
+        const purchasedItemsForSummary = orderItems.map(item => ({
+            id: item.bookId, // map bookId to id for consistency if PurchasedItem expects id
             title: item.title,
-            author: item.author, // Keep author for display on summary
+            // author: item.author, // Author is not in OrderItemInput, would need to be added if required on summary
             price: item.price,
             coverImageUrl: item.coverImageUrl,
             pdfUrl: item.pdfUrl,
@@ -80,11 +83,12 @@ export default function CartPage() {
         sessionStorage.setItem('lastPurchasedItems', JSON.stringify(purchasedItemsForSummary));
         sessionStorage.setItem('lastPurchasedRegionCode', selectedRegion.code);
         
+        await clearCart(true); // Clear Firestore cart silently
+        
         toast({
           title: "Mock Checkout Successful!",
           description: "Your order has been recorded. Redirecting to your order summary...",
         });
-        await clearCart(true); 
         router.push(`/order-summary`);
       } else {
         toast({

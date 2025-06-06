@@ -7,17 +7,16 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { CheckCircle, Download, ShoppingBag, Loader2, AlertTriangle } from 'lucide-react';
-// Removed direct Book type import, will use a simpler PurchasedItem interface
-import { useCart } from '@/contexts/CartContext';
 import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData';
 import { useAuth } from '@/contexts/AuthContext';
 import { handleRecordDownload } from '@/lib/actions/trackingActions';
 import { useToast } from '@/hooks/use-toast';
 
+// Interface for items displayed on this page, derived from OrderItemInput
 interface PurchasedItem {
-  id: string;
+  id: string; // bookId
   title: string;
-  author: string;
+  // author: string; // Author is not part of OrderItemInput, remove if not available
   price: number;
   coverImageUrl: string;
   pdfUrl: string;
@@ -28,7 +27,6 @@ export default function OrderSummaryPage() {
   const [purchasedItems, setPurchasedItems] = useState<PurchasedItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { clearCart } = useCart(); // Used for silent cart clear on mount if needed
   const [regionForFormatting, setRegionForFormatting] = useState<Region>(defaultRegion);
   const { currentUser, isLoading: authIsLoading } = useAuth();
   const { toast } = useToast();
@@ -46,18 +44,13 @@ export default function OrderSummaryPage() {
 
     if (itemsJson) {
       try {
-        const items = JSON.parse(itemsJson) as PurchasedItem[];
+        const items = JSON.parse(itemsJson) as PurchasedItem[]; // Assumes itemsJson matches OrderItemInput structure
         if (Array.isArray(items) && items.length > 0) {
           setPurchasedItems(items);
-          // Cart should have been cleared by CartPage after successful checkout.
-          // If a user lands here directly without going through cart checkout,
-          // this ensures any lingering local cart is also cleared to avoid confusion
-          // if they were using local storage before Firestore cart.
-          clearCart(true); 
         } else if (items.length === 0) {
-          setError("No items were in your cart at checkout.");
+          setError("No items were found for this order summary.");
         } else {
-          setError("Invalid order data found.");
+          setError("Invalid order data found in session.");
         }
         // Clear session storage after use
         sessionStorage.removeItem('lastPurchasedItems');
@@ -70,7 +63,8 @@ export default function OrderSummaryPage() {
       }
     }
     setIsLoading(false);
-  }, [clearCart]); // clearCart is stable
+  }, []);
+
 
   const formatPriceInOrderCurrency = (usdPrice: number): string => {
     const convertedPrice = usdPrice * regionForFormatting.conversionRateToUSD;
@@ -87,7 +81,7 @@ export default function OrderSummaryPage() {
     return `${regionForFormatting.currencySymbol}${displayPrice}`;
   };
 
-  const onDownloadClick = async (bookId: string, bookTitle: string) => {
+  const onDownloadClick = async (bookId: string, bookTitle: string, pdfUrl: string) => {
     if (!currentUser) {
       toast({
         title: "Authentication Error",
@@ -117,6 +111,8 @@ export default function OrderSummaryPage() {
             variant: "destructive",
         });
     }
+    // Trigger download
+    window.location.href = pdfUrl; 
   };
 
   if (isLoading || authIsLoading) {
@@ -152,6 +148,9 @@ export default function OrderSummaryPage() {
         <Button asChild size="lg">
           <Link href="/shop">Continue Shopping</Link>
         </Button>
+         <Button asChild size="lg" variant="outline" className="mt-4">
+          <Link href="/my-orders">View Your Past Orders</Link>
+        </Button>
       </div>
     );
   }
@@ -174,49 +173,41 @@ export default function OrderSummaryPage() {
           <CardDescription>You purchased {purchasedItems.length} item(s) for a total of {formatPriceInOrderCurrency(totalAmountUSD)}.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {purchasedItems.map((book) => (
-            <div key={book.id} className="flex flex-col sm:flex-row items-center gap-4 p-4 border rounded-lg bg-card/50">
+          {purchasedItems.map((item) => (
+            <div key={item.id} className="flex flex-col sm:flex-row items-center gap-4 p-4 border rounded-lg bg-card/50">
               <div className="w-24 h-24 sm:w-20 sm:h-20 relative flex-shrink-0 rounded overflow-hidden aspect-square">
                 <Image
-                  src={book.coverImageUrl}
-                  alt={book.title}
+                  src={item.coverImageUrl}
+                  alt={item.title}
                   layout="fill"
                   objectFit="cover"
-                  data-ai-hint={book.dataAiHint || 'purchased book'}
+                  data-ai-hint={item.dataAiHint || 'purchased book'}
                 />
               </div>
               <div className="flex-grow text-center sm:text-left">
-                <h3 className="text-lg font-headline font-semibold text-primary">{book.title}</h3>
-                <p className="text-sm text-muted-foreground">By {book.author}</p>
-                <p className="text-sm text-foreground font-medium">{formatPriceInOrderCurrency(book.price)}</p>
+                <h3 className="text-lg font-headline font-semibold text-primary">{item.title}</h3>
+                {/* <p className="text-sm text-muted-foreground">By {item.author}</p> Removed author if not present in PurchasedItem */}
+                <p className="text-sm text-foreground font-medium">{formatPriceInOrderCurrency(item.price)}</p>
               </div>
               <Button 
-                asChild 
                 size="sm" 
                 className="w-full sm:w-auto mt-2 sm:mt-0"
-                onClick={async (e) => {
-                    e.preventDefault(); // Prevent default link navigation initially
-                    await onDownloadClick(book.id, book.title);
-                    // After attempting to record, navigate to the PDF URL
-                    // This ensures the record attempt happens before download starts.
-                    // Note: If PDF opens in same tab, toast might be missed.
-                    // A more robust way might be to open PDF in new tab or delay navigation.
-                    window.location.href = book.pdfUrl; 
-                }}
+                onClick={() => onDownloadClick(item.id, item.title, item.pdfUrl)}
               >
-                <a href={book.pdfUrl} download={`${book.title.replace(/\s+/g, '_')}.pdf`}>
                   <Download className="mr-2 h-4 w-4" />
                   Download PDF
-                </a>
               </Button>
             </div>
           ))}
         </CardContent>
       </Card>
 
-      <div className="text-center">
+      <div className="text-center space-y-3 sm:space-y-0 sm:flex sm:justify-center sm:space-x-3">
         <Button asChild size="lg" variant="outline">
           <Link href="/shop">Continue Shopping</Link>
+        </Button>
+        <Button asChild size="lg">
+          <Link href="/my-orders">View Your Orders</Link>
         </Button>
       </div>
     </div>

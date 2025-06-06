@@ -7,10 +7,7 @@ import {
   collection, 
   addDoc, 
   serverTimestamp,
-  doc,
-  getDoc
 } from 'firebase/firestore';
-import type { Book } from '@/data/books'; // For item structure in orders
 
 // Server Action to record a book download
 export async function handleRecordDownload(bookId: string, userId: string) {
@@ -29,6 +26,7 @@ export async function handleRecordDownload(bookId: string, userId: string) {
     });
     revalidatePath('/admin'); 
     revalidatePath('/admin/downloads');
+    // Optionally revalidate user-specific download history if that page exists
     return { success: true, message: 'Download recorded.' };
   } catch (error) {
     console.error('Error recording download:', error);
@@ -41,6 +39,9 @@ export interface OrderItemInput {
   bookId: string;
   title: string;
   price: number; // Price at the time of purchase
+  coverImageUrl: string;
+  pdfUrl: string;
+  dataAiHint?: string;
   // Quantity is implicitly 1 for now
 }
 
@@ -63,7 +64,7 @@ export async function handleCreateOrder(
   try {
     const orderRef = await addDoc(collection(db, 'orders'), {
       userId: userId,
-      items: items, // Array of simplified book objects
+      items: items, // Array of enriched book item objects
       totalAmountUSD: totalAmountUSD,
       orderDate: serverTimestamp(),
       regionCode: regionCode,
@@ -73,6 +74,7 @@ export async function handleCreateOrder(
     });
     revalidatePath('/admin'); 
     revalidatePath('/admin/orders');
+    revalidatePath('/my-orders'); // Revalidate user's order history page
     return { success: true, message: 'Order created successfully.', orderId: orderRef.id };
   } catch (error) {
     console.error('Error creating order:', error);
@@ -80,12 +82,3 @@ export async function handleCreateOrder(
     return { success: false, message: `Failed to create order: ${errorMessage}` };
   }
 }
-
-
-// --- Seeding Actions REMOVED ---
-// User cart, download, and order seeding actions are removed as per request.
-// Book catalog seeding can remain in bookActions.ts for initial setup.
-// export async function handleSeedUserCarts() { ... }
-// export async function handleSeedBookDownloads() { ... }
-// export async function handleSeedOrders() { ... }
-

@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpen, Sparkles, Menu, X, ShoppingCart, Globe, LogIn, LogOut, UserCircle, Loader2, UserPlus } from 'lucide-react';
+import { BookOpen, Sparkles, Menu, X, ShoppingCart, Globe, LogIn, LogOut, UserCircle, Loader2, UserPlus, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { useState } from 'react';
@@ -24,7 +24,7 @@ import { useRouter } from 'next/navigation';
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/shop", label: "Browse Books" },
-  { href: "/recommendations", label: "AI Advisor", icon: <Sparkles className="h-5 w-5 mr-1" />, desktopOnly: false, mobileOnly: true }, // Keep for mobile sheet
+  { href: "/recommendations", label: "AI Advisor", icon: <Sparkles className="h-5 w-5 mr-1" />, desktopOnly: false, mobileOnly: true },
 ];
 
 const Header = () => {
@@ -60,7 +60,6 @@ const Header = () => {
 
       return (
         <div className={cn("flex items-center", isMobile ? "flex-col space-y-2 items-start w-full" : "space-x-2")}>
-          {/* User name/email display, only for mobile sheet */}
           {isMobile && (
             <div className="flex items-center mb-1 text-base">
                 <UserCircle className="mr-2 h-5 w-5 text-primary" />
@@ -105,7 +104,7 @@ const Header = () => {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center space-x-1">
-          {navLinks.filter(link => !link.mobileOnly).map((link) => ( // Filter out mobileOnly links for desktop
+          {navLinks.filter(link => !link.mobileOnly).map((link) => ( 
             <Button variant="ghost" asChild key={link.href} className={linkClasses}>
               <Link href={link.href} className="flex items-center">
                 {link.icon && !link.mobileOnly && <span className="hidden sm:inline-block">{link.icon}</span>}
@@ -126,9 +125,8 @@ const Header = () => {
               </Link>
             </Button>
           )}
-          {/* Region Selector REMOVED from desktop header */}
           <div className="ml-2 pl-2 border-l">
-            {renderAuthSection()} {/* User name display is handled inside renderAuthSection for mobile only */}
+            {renderAuthSection()} 
           </div>
         </nav>
 
@@ -166,9 +164,7 @@ const Header = () => {
                   </SheetClose>
               </SheetHeader>
               <nav className="flex flex-col space-y-3">
-                {/* User info display removed from here; handled by renderAuthSection(true) */}
-                
-                {navLinks.map((link) => ( // All navLinks, including AI Advisor, shown in mobile sheet
+                {navLinks.map((link) => ( 
                   <SheetClose asChild key={link.href}>
                     <Link
                       href={link.href}
@@ -180,22 +176,34 @@ const Header = () => {
                     </Link>
                   </SheetClose>
                 ))}
-                {currentUser && ( 
-                  <SheetClose asChild>
-                    <Link
-                      href="/cart"
-                      className="flex items-center py-3 px-3 text-lg text-card-foreground hover:bg-muted rounded-md transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <ShoppingCart className="h-5 w-5 mr-3" />
-                      Cart
-                      {itemCount > 0 && (
-                        <Badge variant="default" className="ml-auto text-xs">
-                          {itemCount}
-                        </Badge>
-                      )}
-                    </Link>
-                  </SheetClose>
+                {currentUser && (
+                  <>
+                    <SheetClose asChild>
+                      <Link
+                        href="/cart"
+                        className="flex items-center py-3 px-3 text-lg text-card-foreground hover:bg-muted rounded-md transition-colors"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <ShoppingCart className="h-5 w-5 mr-3" />
+                        Cart
+                        {itemCount > 0 && (
+                          <Badge variant="default" className="ml-auto text-xs">
+                            {itemCount}
+                          </Badge>
+                        )}
+                      </Link>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <Link
+                        href="/my-orders"
+                        className="flex items-center py-3 px-3 text-lg text-card-foreground hover:bg-muted rounded-md transition-colors"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <History className="h-5 w-5 mr-3" />
+                        My Orders
+                      </Link>
+                    </SheetClose>
+                  </>
                 )}
                  <div className="px-3 pt-3 border-t mt-3">
                     <p className="text-sm text-muted-foreground mb-2">Region:</p>
