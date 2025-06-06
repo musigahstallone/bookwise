@@ -7,7 +7,7 @@ const Footer = () => {
   return (
     <footer className="bg-card text-card-foreground py-10 mt-auto border-t">
       <div className="container mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div>
             <h3 className="text-lg font-headline font-semibold text-primary mb-3">BookWise</h3>
             <p className="text-sm text-muted-foreground">
@@ -20,7 +20,6 @@ const Footer = () => {
               <li><Link href="/" className="text-sm hover:text-primary transition-colors">Home</Link></li>
               <li><Link href="/shop" className="text-sm hover:text-primary transition-colors">Browse Books</Link></li>
               <li><Link href="/recommendations" className="text-sm hover:text-primary transition-colors">AI Advisor</Link></li>
-              {/* Placeholder links, you can create these pages later */}
               <li><Link href="/about" className="text-sm hover:text-primary transition-colors">About Us</Link></li>
               <li><Link href="/contact" className="text-sm hover:text-primary transition-colors">Contact</Link></li>
             </ul>
@@ -44,10 +43,13 @@ const Footer = () => {
                 </a>
               </Button>
             </div>
-            <h3 className="text-lg font-headline font-semibold text-primary mb-2 mt-6">Legal</h3>
-            <ul className="space-y-1">
-                 <li><Link href="/privacy-policy" className="text-xs text-muted-foreground hover:text-primary transition-colors">Privacy Policy</Link></li>
-                 <li><Link href="/terms-conditions" className="text-xs text-muted-foreground hover:text-primary transition-colors">Terms & Conditions</Link></li>
+          </div>
+          <div>
+            <h3 className="text-lg font-headline font-semibold text-primary mb-3">More</h3>
+            <ul className="space-y-2">
+                 <li><Link href="/privacy-policy" className="text-sm hover:text-primary transition-colors">Privacy Policy</Link></li>
+                 <li><Link href="/terms-conditions" className="text-sm hover:text-primary transition-colors">Terms & Conditions</Link></li>
+                 <li><Link href="/admin" className="text-sm hover:text-primary transition-colors">Admin Panel</Link></li>
             </ul>
           </div>
         </div>
@@ -60,5 +62,3 @@ const Footer = () => {
 };
 
 export default Footer;
-
-    
