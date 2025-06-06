@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, Sparkles, BookHeart } from 'lucide-react';
+import { Loader2, Sparkles, BookHeart, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import type { Book } from '@/data/books';
@@ -26,6 +26,9 @@ interface AIRecommenderClientProps {
   allBooks: Book[]; // To get cover images and links
 }
 
+const SESSION_STORAGE_AI_INPUT_KEY = 'bookwiseAIRecommenderInput';
+const SESSION_STORAGE_AI_RESULTS_KEY = 'bookwiseAIRecommenderResults';
+
 export default function AIRecommenderClient({ bookCatalog, allBooks }: AIRecommenderClientProps) {
   const [recommendations, setRecommendations] = useState<BookRecommendationOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,10 +41,34 @@ export default function AIRecommenderClient({ bookCatalog, allBooks }: AIRecomme
     },
   });
 
+  useEffect(() => {
+    const storedInput = sessionStorage.getItem(SESSION_STORAGE_AI_INPUT_KEY);
+    if (storedInput) {
+      try {
+        // Use reset to update defaultValues and form state
+        form.reset({ userInput: JSON.parse(storedInput) });
+      } catch (e) {
+        console.error("Failed to parse stored AI input:", e);
+        sessionStorage.removeItem(SESSION_STORAGE_AI_INPUT_KEY);
+      }
+    }
+
+    const storedResults = sessionStorage.getItem(SESSION_STORAGE_AI_RESULTS_KEY);
+    if (storedResults) {
+      try {
+        setRecommendations(JSON.parse(storedResults));
+      } catch (e) {
+        console.error("Failed to parse stored AI results:", e);
+        sessionStorage.removeItem(SESSION_STORAGE_AI_RESULTS_KEY);
+      }
+    }
+  }, [form]); // form is stable, this effect runs once on mount
+
   const onSubmit: SubmitHandler<AIRecommenderFormValues> = async (data) => {
     setIsLoading(true);
     setError(null);
-    setRecommendations(null);
+    // Don't clear previous recommendations immediately, wait for new ones or error
+    // setRecommendations(null); 
 
     try {
       const result = await getBookRecommendation({
@@ -49,12 +76,23 @@ export default function AIRecommenderClient({ bookCatalog, allBooks }: AIRecomme
         bookDescriptions: bookCatalog,
       });
       setRecommendations(result);
+      sessionStorage.setItem(SESSION_STORAGE_AI_RESULTS_KEY, JSON.stringify(result));
+      sessionStorage.setItem(SESSION_STORAGE_AI_INPUT_KEY, JSON.stringify(data.userInput));
     } catch (e) {
       console.error('Error getting recommendations:', e);
       setError('Sorry, something went wrong. Please try again.');
+      // Do not clear session storage on API error, user might want to retry or keep old results.
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleClearSearch = () => {
+    form.reset({ userInput: '' });
+    setRecommendations(null);
+    setError(null);
+    sessionStorage.removeItem(SESSION_STORAGE_AI_INPUT_KEY);
+    sessionStorage.removeItem(SESSION_STORAGE_AI_RESULTS_KEY);
   };
 
   const findBookDetails = (title: string) => {
@@ -92,19 +130,27 @@ export default function AIRecommenderClient({ bookCatalog, allBooks }: AIRecomme
                 </FormItem>
               )}
             />
-            <Button type="submit" disabled={isLoading} size="lg" className="w-full md:w-auto bg-primary hover:bg-primary/90">
-              {isLoading ? (
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              ) : (
-                <Sparkles className="mr-2 h-5 w-5" />
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button type="submit" disabled={isLoading} size="lg" className="w-full sm:w-auto bg-primary hover:bg-primary/90">
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-5 w-5" />
+                )}
+                Get Recommendations
+              </Button>
+              {(form.getValues('userInput') || recommendations) && (
+                 <Button type="button" variant="outline" onClick={handleClearSearch} size="lg" className="w-full sm:w-auto">
+                    <XCircle className="mr-2 h-5 w-5" />
+                    Clear Search
+                </Button>
               )}
-              Get Recommendations
-            </Button>
+            </div>
           </form>
         </Form>
 
         {error && (
-          <div className="mt-6 p-4 bg-destructive/10 text-destructive border border-destructive rounded-md">
+          <div className="mt-6 p-4 bg-destructive/10 text-destructive border border-destructive/20 rounded-md text-sm">
             {error}
           </div>
         )}
@@ -116,11 +162,11 @@ export default function AIRecommenderClient({ bookCatalog, allBooks }: AIRecomme
               const bookDetail = findBookDetails(rec.title);
               return (
                 <Card key={index} className="overflow-hidden hover:shadow-lg transition-shadow">
-                  <CardContent className="p-4 flex flex-col sm:flex-row gap-4">
+                  <CardContent className="p-4 flex flex-col sm:flex-row gap-4 items-start">
                     {bookDetail && (
                       <div className="w-full sm:w-1/4 flex-shrink-0">
                         <Link href={`/books/${bookDetail.id}`}>
-                          <div className="aspect-square relative rounded overflow-hidden cursor-pointer">
+                          <div className="aspect-square relative rounded overflow-hidden cursor-pointer shadow-md">
                             <Image
                               src={bookDetail.coverImageUrl}
                               alt={bookDetail.title}
@@ -156,7 +202,7 @@ export default function AIRecommenderClient({ bookCatalog, allBooks }: AIRecomme
             })}
           </div>
         )}
-         {recommendations && recommendations.recommendedBooks.length === 0 && !isLoading && (
+         {recommendations && recommendations.recommendedBooks.length === 0 && !isLoading && !error && (
           <div className="mt-6 p-4 text-center text-muted-foreground">
             <p>No specific recommendations found based on your input. Try being more descriptive or check out our general catalog!</p>
           </div>
