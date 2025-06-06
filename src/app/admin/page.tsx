@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BookCopy, Users, BarChart3, Info, Database, DownloadCloud, UserPlus, RefreshCw, ShoppingCart, History, PackageOpen, AlertTriangle } from 'lucide-react';
+import { BookCopy, Users, BarChart3, Info, Database, DownloadCloud, UserPlus, RefreshCw, ShoppingCart, AlertTriangle as PageAlertTriangleIcon } from 'lucide-react'; // Renamed AlertTriangle to avoid conflict
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -12,12 +12,6 @@ import { Loader2 } from 'lucide-react';
 import { countBooksInDb } from '@/lib/book-service-firebase';
 import { countUsersInDb } from '@/lib/user-service-firebase'; 
 import { handleSeedDatabase } from '@/lib/actions/bookActions';
-// Tracking seed actions removed
-// import { 
-//   handleSeedUserCarts, 
-//   handleSeedBookDownloads, 
-//   handleSeedOrders 
-// } from '@/lib/actions/trackingActions';
 import { getDashboardStats } from '@/lib/stats-service-firebase';
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
 import {
@@ -32,6 +26,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+const LOCAL_STORAGE_BOOKS_SEEDED_KEY = 'bookwiseAdminBooksSeeded';
+
 type FetchDashboardDataFunction = () => Promise<{
     bookCount: number;
     userCount: number;
@@ -45,9 +41,6 @@ type FetchDashboardDataFunction = () => Promise<{
 
 interface LoadingStates {
   seedingBooks: boolean;
-  // seedingCarts: boolean; // Removed
-  // seedingDownloads: boolean; // Removed
-  // seedingOrders: boolean; // Removed
   reloadingStats: boolean;
 }
 
@@ -55,11 +48,10 @@ export default function AdminDashboardPage() {
   const { toast } = useToast();
   const [loadingStates, setLoadingStates] = useState<LoadingStates>({
     seedingBooks: false,
-    // seedingCarts: false, // Removed
-    // seedingDownloads: false, // Removed
-    // seedingOrders: false, // Removed
     reloadingStats: false,
   });
+  const [hasSeededBooks, setHasSeededBooks] = useState(false);
+
 
   const [dashboardData, setDashboardData] = useState({
     bookCount: 0,
@@ -75,6 +67,14 @@ export default function AdminDashboardPage() {
 
   const firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 
+  useEffect(() => {
+    const booksSeededStatus = localStorage.getItem(LOCAL_STORAGE_BOOKS_SEEDED_KEY);
+    if (booksSeededStatus === 'true') {
+      setHasSeededBooks(true);
+    }
+  }, []);
+
+
   const fetchAllDashboardData: FetchDashboardDataFunction = async () => {
     if (!firebaseConfigured) {
       return {
@@ -87,7 +87,7 @@ export default function AdminDashboardPage() {
       const [books, users, statsData] = await Promise.all([
         countBooksInDb(),
         countUsersInDb(),
-        getDashboardStats() // This now includes downloads and sales
+        getDashboardStats()
       ]);
       return {
         bookCount: books, userCount: users, newUsersToday: statsData.newUsersToday,
@@ -103,7 +103,7 @@ export default function AdminDashboardPage() {
         generalError = error.message;
         detailedMsg = error.message;
         if (error.message.includes("PERMISSION_DENIED")) {
-            detailedMsg = "Access to fetch some dashboard data was denied by Firestore security rules. Ensure the admin user has the 'admin' role and rules allow reading necessary collections. You may need to manually set your role to 'admin' in Firestore for your user document.";
+            detailedMsg = "Access to fetch some dashboard data was denied by Firestore security rules. Ensure the admin user has the 'admin' role in their Firestore document and rules allow reading necessary collections (users, bookDownloads, orders).";
         }
       }
       
@@ -135,31 +135,25 @@ export default function AdminDashboardPage() {
     setLoadingStates(prev => ({ ...prev, reloadingStats: false }));
   };
 
-  const createSeedHandler = (
-    action: () => Promise<{ success: boolean; message?: string }>,
-    loadingKey: keyof LoadingStates,
-    successTitle: string,
-    errorTitle: string
-  ) => async () => {
+  const handleSeedBooks = async () => {
     if (!firebaseConfigured) {
       toast({ title: 'Firebase Not Configured', description: 'Cannot perform seeding actions.', variant: 'destructive' });
       return;
     }
-    setLoadingStates(prev => ({ ...prev, [loadingKey]: true }));
-    toast({ title: `Seeding ${loadingKey.replace('seeding', '')}...`, description: 'Please wait.' });
-    const result = await action();
+    setLoadingStates(prev => ({ ...prev, seedingBooks: true }));
+    toast({ title: `Seeding Book Catalog...`, description: 'Please wait.' });
+    const result = await handleSeedDatabase();
     if (result.success) {
-      toast({ title: successTitle, description: result.message });
+      toast({ title: 'Books Seeded!', description: result.message });
+      localStorage.setItem(LOCAL_STORAGE_BOOKS_SEEDED_KEY, 'true');
+      setHasSeededBooks(true);
       await handleReloadStats(); 
     } else {
-      toast({ title: errorTitle, description: result.message, variant: 'destructive' });
+      toast({ title: 'Error Seeding Books', description: result.message, variant: 'destructive' });
     }
-    setLoadingStates(prev => ({ ...prev, [loadingKey]: false }));
+    setLoadingStates(prev => ({ ...prev, seedingBooks: false }));
   };
-
-  const handleSeedBooks = createSeedHandler(handleSeedDatabase, 'seedingBooks', 'Books Seeded!', 'Error Seeding Books');
-  // Removed handlers for seeding carts, downloads, orders
-
+  
   const salesAmountDisplay = typeof dashboardData.totalSalesAmount === 'number' 
     ? dashboardData.totalSalesAmount.toFixed(2) 
     : '0.00';
@@ -169,7 +163,7 @@ export default function AdminDashboardPage() {
     { title: 'Total Registered Users', value: firebaseConfigured ? dashboardData.userCount.toString() : 'N/A', icon: Users, href: '/admin/users', description: 'View registered users' },
     { title: 'New Users (Today)', value: firebaseConfigured ? dashboardData.newUsersToday.toString() : 'N/A', icon: UserPlus, description: 'Users signed up today' },
     { title: 'Total Downloads', value: firebaseConfigured ? dashboardData.totalDownloads.toString() : 'N/A', icon: DownloadCloud, href: '/admin/downloads', description: 'Total book PDF downloads' },
-    { title: 'Sales Overview', value: firebaseConfigured ? `$${salesAmountDisplay} (${dashboardData.totalOrders} orders)` : 'N/A', icon: BarChart3, href: '/admin/orders', description: 'Mock sales data from orders' },
+    { title: 'Sales Overview', value: firebaseConfigured ? `$${salesAmountDisplay} (${dashboardData.totalOrders} orders)` : 'N/A', icon: BarChart3, href: '/admin/orders', description: 'Sales data from orders' },
   ];
 
   if (isInitialLoading && firebaseConfigured) {
@@ -237,29 +231,33 @@ export default function AdminDashboardPage() {
                   <CardDescription>Seed the initial book catalog. Other data like users, orders, and downloads are generated organically.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
-                 <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="outline" disabled={loadingStates.seedingBooks || !firebaseConfigured}>
-                            {loadingStates.seedingBooks ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BookCopy className="mr-2 h-4 w-4" />}
-                            Seed Book Catalog
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                        <AlertDialogTitle>Seed Book Catalog?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will add/overwrite books from `src/data/books.ts` to Firestore.
-                        </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                        <AlertDialogCancel disabled={loadingStates.seedingBooks}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleSeedBooks} disabled={loadingStates.seedingBooks} className="bg-orange-500 hover:bg-orange-600">
-                            {loadingStates.seedingBooks ? 'Seeding...' : 'Yes, Seed Books'}
-                        </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-                {/* Removed buttons for seeding carts, downloads, orders */}
+                 {!hasSeededBooks && (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="outline" disabled={loadingStates.seedingBooks || !firebaseConfigured}>
+                                {loadingStates.seedingBooks ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BookCopy className="mr-2 h-4 w-4" />}
+                                Seed Book Catalog
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                            <AlertDialogTitle>Seed Book Catalog?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will add/overwrite books from `src/data/books.ts` to Firestore. This button will disappear after a successful seed.
+                            </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                            <AlertDialogCancel disabled={loadingStates.seedingBooks}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleSeedBooks} disabled={loadingStates.seedingBooks} className="bg-orange-500 hover:bg-orange-600">
+                                {loadingStates.seedingBooks ? 'Seeding...' : 'Yes, Seed Books'}
+                            </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                 )}
+                 {hasSeededBooks && (
+                    <p className="text-sm text-muted-foreground p-2 rounded-md bg-muted/50">Book catalog has been seeded.</p>
+                 )}
               </CardContent>
           </Card>
 
@@ -297,7 +295,7 @@ export default function AdminDashboardPage() {
       </div>
       
        <div className="mt-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
-        <p className="font-bold flex items-center"><AlertTriangle className="mr-2 h-5 w-5" />Important: Data Persistence Note</p>
+        <p className="font-bold flex items-center"><PageAlertTriangleIcon className="mr-2 h-5 w-5" />Important: Data Persistence Note</p>
         <p>- <strong className="text-green-700">PDF & Cover Image Files:</strong> Uploaded files are persisted in Firebase Storage.</p>
         <p>- <strong className="text-green-700">Book, User, Cart, Order, Download Metadata:</strong> Information is managed in Firebase Firestore and will persist.</p>
         <p className="mt-2">- The "Seed Book Catalog" action populates the 'books' collection. Users are created via signup. Orders and downloads are tracked organically.</p>
