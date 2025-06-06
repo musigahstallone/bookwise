@@ -524,11 +524,11 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                 </FormItem>
               )}
             />
-            <div className="flex space-x-3 justify-end pt-4">
-              <Button type="button" variant="outline" onClick={() => router.back()} disabled={isLoading}>
+            <div className="flex flex-col sm:flex-row sm:justify-end gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={() => router.back()} disabled={isLoading} className="w-full sm:w-auto">
                 Cancel
               </Button>
-              <Button type="submit" disabled={isLoading || !firebaseConfigured} className="bg-primary hover:bg-primary/90">
+              <Button type="submit" disabled={isLoading || !firebaseConfigured} className="bg-primary hover:bg-primary/90 w-full sm:w-auto">
                 {(isUploadingPdf || isUploadingCover || isLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {submitButtonText}
               </Button>
@@ -539,4 +539,3 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
     </Card>
   );
 }
-
