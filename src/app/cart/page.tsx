@@ -11,9 +11,11 @@ import { Trash2, ShoppingBag, XCircle, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
+import { useRegion } from '@/contexts/RegionContext'; // Added
 
 export default function CartPage() {
   const { cartItems, removeFromCart, clearCart, getCartTotal, getItemCount } = useCart();
+  const { formatPrice } = useRegion(); // Added
   const router = useRouter();
   const { toast } = useToast();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -34,13 +36,13 @@ export default function CartPage() {
       description: "Please wait a moment.",
     });
 
-    // Simulate payment processing delay
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Store items in sessionStorage before redirecting
-    // The cart will be cleared by the order-summary page after it loads the items.
     try {
         sessionStorage.setItem('lastPurchasedItems', JSON.stringify(cartItems));
+        // Store the current region code to use for formatting prices on the order summary page
+        const regionCode = localStorage.getItem('bookwiseSelectedRegion') || 'US';
+        sessionStorage.setItem('lastPurchasedRegionCode', regionCode);
     } catch (error) {
         console.error("Error saving to sessionStorage:", error);
         toast({
@@ -52,18 +54,12 @@ export default function CartPage() {
         return;
     }
     
-    // DO NOT clear cart here. It will be cleared by the order-summary page.
-    // clearCart(true); 
-
     toast({
       title: "Mock Checkout Successful!",
       description: "Redirecting to your order summary...",
     });
     
     router.push(`/order-summary`);
-    // setIsCheckingOut will be reset if user navigates back or on new page load.
-    // If they navigate back immediately before order-summary clears, cart will still have items.
-    // This is acceptable for mock.
   };
 
   if (cartItems.length === 0 && !isCheckingOut) {
@@ -104,7 +100,7 @@ export default function CartPage() {
                   <h2 className="text-lg font-headline font-semibold text-primary">{item.title}</h2>
                 </Link>
                 <p className="text-sm text-muted-foreground">By {item.author}</p>
-                <p className="text-md font-semibold text-foreground mt-1">${item.price.toFixed(2)}</p>
+                <p className="text-md font-semibold text-foreground mt-1">{formatPrice(item.price)}</p> {/* Updated price display */}
                 <p className="text-xs text-muted-foreground mt-1">Quantity: 1 (PDF Download)</p>
               </div>
               <div className="flex items-center space-x-3 mt-4 sm:mt-0 sm:ml-auto flex-shrink-0">
@@ -125,7 +121,7 @@ export default function CartPage() {
             <CardContent className="space-y-4">
               <div className="flex justify-between text-base">
                 <span>Subtotal ({getItemCount()} items)</span>
-                <span className="font-semibold">${getCartTotal().toFixed(2)}</span>
+                <span className="font-semibold">{formatPrice(getCartTotal())}</span> {/* Updated price display */}
               </div>
               <div className="flex justify-between text-base">
                 <span>Shipping</span>
@@ -134,7 +130,7 @@ export default function CartPage() {
               <Separator />
               <div className="flex justify-between text-xl font-bold text-primary">
                 <span>Total</span>
-                <span>${getCartTotal().toFixed(2)}</span>
+                <span>{formatPrice(getCartTotal())}</span> {/* Updated price display */}
               </div>
               <Button 
                 size="lg" 

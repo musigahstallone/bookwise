@@ -9,6 +9,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription }
 import { Badge } from '@/components/ui/badge';
 import { ArrowRight, ShoppingCart } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
+import { useRegion } from '@/contexts/RegionContext'; // Added
 
 interface BookCardProps {
   book: Book;
@@ -18,6 +19,7 @@ const BookCard: React.FC<BookCardProps> = ({ book }) => {
   const currentYear = new Date().getFullYear();
   const isNew = book.publishedYear >= currentYear - 1;
   const { addToCart } = useCart();
+  const { formatPrice } = useRegion(); // Added
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault(); 
@@ -67,7 +69,7 @@ const BookCard: React.FC<BookCardProps> = ({ book }) => {
         <p className="text-sm line-clamp-3 mb-3">{book.description}</p>
       </CardContent>
       <CardFooter className="p-4 pt-0 flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
-        <p className="text-lg font-bold text-primary order-1 sm:order-none">${book.price.toFixed(2)}</p>
+        <p className="text-lg font-bold text-primary order-1 sm:order-none">{formatPrice(book.price)}</p> {/* Updated price display */}
         <div className="flex space-x-2 order-2 sm:order-none w-full sm:w-auto justify-center sm:justify-end">
           <Button asChild variant="outline" size="sm" className="flex-grow sm:flex-grow-0">
             <Link href={`/books/${book.id}`}>

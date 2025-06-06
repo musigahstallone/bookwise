@@ -1,5 +1,5 @@
 
-import { getBookByIdFromDb } from '@/lib/book-service-firebase'; // Updated
+import { getBookByIdFromDb } from '@/lib/book-service-firebase';
 import type { Book } from '@/data/books';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -8,9 +8,8 @@ import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ShoppingCart, ArrowLeft, AlertTriangle } from 'lucide-react';
-// BuyButtonClient might be removed or re-evaluated if AddToCart is primary action
-// For now, keep AddToCart from CartContext
-import AddToCartButton from '@/components/books/AddToCartButton'; // New client component for cart interaction
+import AddToCartButton from '@/components/books/AddToCartButton';
+import PriceDisplay from '@/components/books/PriceDisplay'; // New component for client-side price formatting
 
 interface BookDetailsPageProps {
   params: { id: string };
@@ -75,9 +74,9 @@ export default async function BookDetailsPage({ params }: BookDetailsPageProps) 
               <Image
                 src={book.coverImageUrl}
                 alt={book.title}
-                fill // Changed from layout="fill" to fill for Next 13+
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Example sizes, adjust as needed
-                style={{ objectFit: 'cover' }} // Replaces objectFit prop
+                fill
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                style={{ objectFit: 'cover' }}
                 data-ai-hint={book.dataAiHint || 'book cover detail'}
               />
             </div>
@@ -93,7 +92,7 @@ export default async function BookDetailsPage({ params }: BookDetailsPageProps) 
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6 pt-0">
-              <p className="text-2xl font-bold text-primary mb-4">${book.price.toFixed(2)}</p>
+              <PriceDisplay usdPrice={book.price} className="text-2xl font-bold text-primary mb-4" /> {/* Updated price display */}
               <Separator className="my-4" />
               <h3 className="text-xl font-semibold mb-2 font-headline">Description</h3>
               <p className="text-base leading-relaxed mb-6 whitespace-pre-line">

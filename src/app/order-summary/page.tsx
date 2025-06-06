@@ -8,43 +8,68 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { CheckCircle, Download, ShoppingBag, Loader2, AlertTriangle } from 'lucide-react';
 import type { Book } from '@/data/books';
-import { useCart } from '@/contexts/CartContext'; // Import useCart
+import { useCart } from '@/contexts/CartContext';
+import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData'; // Added
 
 interface PurchasedItem extends Book {
-  // quantity is implicitly 1 for PDFs as per CartContext logic
+  // quantity is implicitly 1 for PDFs
 }
 
 export default function OrderSummaryPage() {
   const [purchasedItems, setPurchasedItems] = useState<PurchasedItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { clearCart } = useCart(); // Get clearCart function from context
+  const { clearCart } = useCart();
+  const [regionForFormatting, setRegionForFormatting] = useState<Region>(defaultRegion);
 
   useEffect(() => {
     const itemsJson = sessionStorage.getItem('lastPurchasedItems');
+    const regionCodeJson = sessionStorage.getItem('lastPurchasedRegionCode');
+    
+    if (regionCodeJson) {
+        const region = getRegionByCode(regionCodeJson);
+        if (region) {
+            setRegionForFormatting(region);
+        }
+    }
+
     if (itemsJson) {
       try {
         const items = JSON.parse(itemsJson) as PurchasedItem[];
-        if (Array.isArray(items) && items.length > 0) { // Ensure items is an array and not empty
+        if (Array.isArray(items) && items.length > 0) {
           setPurchasedItems(items);
-          clearCart(true); // Clear the cart after successfully loading items for summary
-        } else if (items.length === 0) { // If cart was empty at checkout but somehow reached here
+          clearCart(true); 
+        } else if (items.length === 0) {
           setError("No items were in your cart at checkout.");
         } else {
           setError("Invalid order data found.");
         }
-        // Clear the item from sessionStorage to prevent re-display on refresh or back navigation
         sessionStorage.removeItem('lastPurchasedItems');
+        sessionStorage.removeItem('lastPurchasedRegionCode');
       } catch (e) {
         console.error("Failed to parse purchased items from session storage:", e);
         setError("Could not load your order details. The data might be corrupted.");
-        sessionStorage.removeItem('lastPurchasedItems'); // Also remove if parsing fails
+        sessionStorage.removeItem('lastPurchasedItems');
+        sessionStorage.removeItem('lastPurchasedRegionCode');
       }
     }
-    // If itemsJson is null, it means no purchase was made or sessionStorage was cleared,
-    // so purchasedItems will remain empty, and the appropriate message will be shown.
     setIsLoading(false);
-  }, [clearCart]); // Add clearCart to dependency array
+  }, [clearCart]);
+
+  const formatPriceInOrderCurrency = (usdPrice: number): string => {
+    const convertedPrice = usdPrice * regionForFormatting.conversionRateToUSD;
+    let displayPrice;
+    if (regionForFormatting.currencyCode === 'KES') {
+        if (Math.abs(convertedPrice - Math.round(convertedPrice)) < 0.005) {
+             displayPrice = Math.round(convertedPrice).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        } else {
+            displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+    } else {
+         displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return `${regionForFormatting.currencySymbol}${displayPrice}`;
+  };
 
   if (isLoading) {
     return (
@@ -83,7 +108,7 @@ export default function OrderSummaryPage() {
     );
   }
 
-  const totalAmount = purchasedItems.reduce((sum, item) => sum + item.price, 0);
+  const totalAmountUSD = purchasedItems.reduce((sum, item) => sum + item.price, 0);
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
@@ -98,7 +123,7 @@ export default function OrderSummaryPage() {
       <Card className="shadow-xl mb-8">
         <CardHeader>
           <CardTitle className="text-2xl font-headline">Order Summary</CardTitle>
-          <CardDescription>You purchased {purchasedItems.length} item(s) for a total of ${totalAmount.toFixed(2)}.</CardDescription>
+          <CardDescription>You purchased {purchasedItems.length} item(s) for a total of {formatPriceInOrderCurrency(totalAmountUSD)}.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {purchasedItems.map((book) => (
@@ -115,7 +140,7 @@ export default function OrderSummaryPage() {
               <div className="flex-grow text-center sm:text-left">
                 <h3 className="text-lg font-headline font-semibold text-primary">{book.title}</h3>
                 <p className="text-sm text-muted-foreground">By {book.author}</p>
-                <p className="text-sm text-foreground font-medium">${book.price.toFixed(2)}</p>
+                <p className="text-sm text-foreground font-medium">{formatPriceInOrderCurrency(book.price)}</p> {/* Updated price display */}
               </div>
               <Button asChild size="sm" className="w-full sm:w-auto mt-2 sm:mt-0">
                 <a href={book.pdfUrl} download={`${book.title.replace(/\s+/g, '_')}.pdf`}>
