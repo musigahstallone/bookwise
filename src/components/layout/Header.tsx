@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { BookOpen, Sparkles, Menu, X, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useCart } from '@/contexts/CartContext';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -20,32 +20,19 @@ const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { getItemCount } = useCart();
   const itemCount = getItemCount();
-  const [isScrolled, setIsScrolled] = useState(false);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20); // Adjust scroll threshold as needed
-    };
-    window.addEventListener('scroll', handleScroll);
-    // Set initial state in case page loads already scrolled
-    handleScroll();
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
+  // Removed isScrolled state and useEffect for scroll handling
 
   const headerClasses = cn(
-    "sticky top-0 z-50 transition-all duration-300 ease-in-out",
-    isScrolled ? "bg-card shadow-md text-card-foreground" : "bg-background shadow-none text-foreground"
+    "sticky top-0 z-50 bg-background shadow-none text-foreground" // Always use initial styles
   );
 
   const linkClasses = cn(
-    "text-base px-3 py-2",
-    isScrolled ? "text-card-foreground hover:text-primary" : "text-foreground hover:text-primary"
+    "text-base px-3 py-2 text-foreground hover:text-primary" // Always use initial link styles
   );
   
   const iconButtonClasses = cn(
-    isScrolled ? "text-card-foreground hover:text-primary" : "text-foreground hover:text-primary"
+    "text-foreground hover:text-primary" // Always use initial icon button styles
   );
 
   return (
@@ -75,7 +62,7 @@ const Header = () => {
               <ShoppingCart className="h-5 w-5 mr-1" />
               Cart
               {itemCount > 0 && (
-                <Badge variant={isScrolled ? "default" : "secondary"} className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs"> {/* Consistent badge variant */}
                   {itemCount}
                 </Badge>
               )}
@@ -89,7 +76,7 @@ const Header = () => {
             <Link href="/cart">
               <ShoppingCart className="h-6 w-6" />
               {itemCount > 0 && (
-                 <Badge variant={isScrolled ? "default" : "secondary"} className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                 <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs"> {/* Consistent badge variant */}
                   {itemCount}
                 </Badge>
               )}
@@ -127,6 +114,22 @@ const Header = () => {
                     </Link>
                   </SheetClose>
                 ))}
+                 {/* Cart link in mobile menu */}
+                <SheetClose asChild>
+                  <Link
+                    href="/cart"
+                    className="flex items-center py-3 px-3 text-lg text-card-foreground hover:bg-muted rounded-md transition-colors"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <ShoppingCart className="h-5 w-5 mr-3" />
+                    Cart
+                    {itemCount > 0 && (
+                      <Badge variant="default" className="ml-auto text-xs">
+                        {itemCount}
+                      </Badge>
+                    )}
+                  </Link>
+                </SheetClose>
               </nav>
             </SheetContent>
           </Sheet>
