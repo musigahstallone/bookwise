@@ -1,7 +1,7 @@
 
 // src/app/admin/downloads/page.tsx
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, Download, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Download, Users, BookCopy, ExternalLink } from 'lucide-react'; // Added Users, BookCopy
 import { getAllDownloadsWithDetailsFromDb, type DownloadWithDetails } from '@/lib/tracking-service-firebase';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import PaginationControls from '@/components/books/PaginationControls'; // Assuming this is generic enough
+// PaginationControls is not directly used here, using Link buttons instead for SSR
 import { format } from 'date-fns';
 
 const DOWNLOADS_PER_PAGE = 15;
@@ -96,20 +96,24 @@ export default async function ManageDownloadsPage({ searchParams }: ManageDownlo
                           <TableCell className="font-medium">{dl.bookTitle || 'Unknown Book'}</TableCell>
                           <TableCell>
                             <div>{dl.userName || 'N/A'}</div>
-                            <div className="text-xs text-muted-foreground">{dl.userEmail}</div>
+                            <div className="text-xs text-muted-foreground">{dl.userEmail || 'No Email'}</div>
                           </TableCell>
                           <TableCell className="hidden md:table-cell">{format(dl.downloadedAt, "PPp")}</TableCell>
                           <TableCell className="text-center">
-                            <Button variant="outline" size="xs" asChild>
-                                <Link href={`/admin/users/edit/${dl.userId}`} title="View User">
-                                    <Users className="mr-1 h-3 w-3" /> User
-                                </Link>
-                            </Button>
-                            <Button variant="outline" size="xs" asChild className="ml-2">
-                                <Link href={`/admin/books/edit/${dl.bookId}`} title="View Book">
-                                    <BookCopy className="mr-1 h-3 w-3" /> Book
-                                </Link>
-                            </Button>
+                            {dl.userId && (
+                                <Button variant="outline" size="xs" asChild>
+                                    <Link href={`/admin/users/edit/${dl.userId}`} title="View User">
+                                        <Users className="mr-1 h-3 w-3" /> User
+                                    </Link>
+                                </Button>
+                            )}
+                            {dl.bookId && (
+                                <Button variant="outline" size="xs" asChild className="ml-2">
+                                    <Link href={`/admin/books/edit/${dl.bookId}`} title="View Book">
+                                        <BookCopy className="mr-1 h-3 w-3" /> Book
+                                    </Link>
+                                </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
