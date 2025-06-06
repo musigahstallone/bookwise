@@ -1,75 +1,190 @@
 
+'use client'; // Convert to client component to use hooks for button interactions
+
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BookCopy, Users, BarChart3, AlertTriangle, Info, Database, DownloadCloud, UserPlus, RefreshCw } from 'lucide-react';
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { BookCopy, Users, BarChart3, Info, Database, DownloadCloud, UserPlus, RefreshCw, ShoppingCart, History, PackageOpen } from 'lucide-react';
+import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2 } from 'lucide-react';
+
 import { countBooksInDb } from '@/lib/book-service-firebase';
 import { countUsersInDb } from '@/lib/user-service-firebase'; 
-import SeedDatabaseButton from '@/components/admin/SeedDatabaseButton';
+import { handleSeedDatabase } from '@/lib/actions/bookActions'; // For books
+import { 
+  handleSeedUserCarts, 
+  handleSeedBookDownloads, 
+  handleSeedOrders 
+} from '@/lib/actions/trackingActions'; // For tracking data
 import { getDashboardStats } from '@/lib/stats-service-firebase';
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
-import { revalidatePath } from 'next/cache';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
+// Re-fetch data on demand function type
+type FetchDashboardDataFunction = () => Promise<{
+    bookCount: number;
+    userCount: number;
+    newUsersToday: number;
+    totalDownloads: number;
+    totalSalesAmount: number;
+    totalOrders: number;
+    fetchError: string | null;
+    detailedErrorMessage: string | null;
+}>;
 
 
-export default async function AdminDashboardPage() {
-  let bookCount = 0;
-  let userCount = 0; 
-  let newUsersToday = 0;
-  let totalDownloads = 0;
-  let totalSalesAmount = 0;
-  let totalOrders = 0;
+// Define state for various loading states
+interface LoadingStates {
+  seedingBooks: boolean;
+  seedingCarts: boolean;
+  seedingDownloads: boolean;
+  seedingOrders: boolean;
+  reloadingStats: boolean;
+}
 
-  let firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  let generalFetchError: string | null = null;
-  let detailedErrorMessage: string | null = null;
 
-  if (firebaseConfigured) {
+export default function AdminDashboardPage() {
+  const { toast } = useToast();
+  const [loadingStates, setLoadingStates] = useState<LoadingStates>({
+    seedingBooks: false,
+    seedingCarts: false,
+    seedingDownloads: false,
+    seedingOrders: false,
+    reloadingStats: false,
+  });
+
+  const [dashboardData, setDashboardData] = useState({
+    bookCount: 0,
+    userCount: 0,
+    newUsersToday: 0,
+    totalDownloads: 0,
+    totalSalesAmount: 0,
+    totalOrders: 0,
+    fetchError: null as string | null,
+    detailedErrorMessage: null as string | null,
+  });
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  const firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+  const fetchAllDashboardData: FetchDashboardDataFunction = async () => {
+    if (!firebaseConfigured) {
+      return {
+        bookCount: 0, userCount: 0, newUsersToday: 0, totalDownloads: 0,
+        totalSalesAmount: 0, totalOrders: 0, fetchError: "Firebase Not Configured",
+        detailedErrorMessage: "Firebase Project ID is not set. Please configure .env.local."
+      };
+    }
     try {
-      const [
-        books, 
-        users,
-        dashboardStats
-      ] = await Promise.all([
+      const [books, users, stats] = await Promise.all([
         countBooksInDb(),
         countUsersInDb(),
         getDashboardStats()
       ]);
-      
-      bookCount = books;
-      userCount = users;
-      newUsersToday = dashboardStats.newUsersToday;
-      totalDownloads = dashboardStats.totalDownloads;
-      totalSalesAmount = dashboardStats.totalSalesAmount;
-      totalOrders = dashboardStats.totalOrders;
-
+      return {
+        bookCount: books, userCount: users, newUsersToday: stats.newUsersToday,
+        totalDownloads: stats.totalDownloads, totalSalesAmount: stats.totalSalesAmount,
+        totalOrders: stats.totalOrders, fetchError: null, detailedErrorMessage: null
+      };
     } catch (error: any) {
       console.error("Error fetching dashboard data:", error);
-      generalFetchError = error.message || "An unknown error occurred while fetching dashboard data.";
+      let generalError = error.message || "An unknown error occurred while fetching dashboard data.";
+      let detailedMsg = generalError;
       if (error.message && error.message.includes("PERMISSION_DENIED")) {
-        detailedErrorMessage = "Access to fetch some dashboard data was denied by Firestore security rules. Please ensure the logged-in admin user has the correct 'admin' role set in their Firestore user document, and that Firestore security rules allow admins to read necessary collections (users, bookDownloads, orders). Server-side fetches from this page might not have the client's auth context for rule evaluation.";
-      } else {
-        detailedErrorMessage = generalFetchError;
+        detailedMsg = "Access to fetch some dashboard data was denied by Firestore security rules. Ensure the admin user has the 'admin' role and rules allow reading necessary collections.";
       }
+      return {
+        bookCount: 0, userCount: 0, newUsersToday: 0, totalDownloads: 0,
+        totalSalesAmount: 0, totalOrders: 0, fetchError: generalError, detailedErrorMessage: detailedMsg
+      };
     }
-  }
+  };
+  
+  useState(() => {
+    fetchAllDashboardData().then(data => {
+        setDashboardData(data);
+        setIsInitialLoading(false);
+    });
+  });
 
-  const handleRetry = async () => {
-    'use server';
-    revalidatePath('/admin');
-  }
+
+  const handleReloadStats = async () => {
+    setLoadingStates(prev => ({ ...prev, reloadingStats: true }));
+    toast({ title: 'Refreshing Stats...', description: 'Fetching the latest dashboard data.' });
+    const data = await fetchAllDashboardData();
+    setDashboardData(data);
+    if (data.fetchError) {
+        toast({ title: 'Error Refreshing Stats', description: data.detailedErrorMessage || data.fetchError, variant: 'destructive'});
+    } else {
+        toast({ title: 'Stats Refreshed!', description: 'Dashboard data updated.' });
+    }
+    setLoadingStates(prev => ({ ...prev, reloadingStats: false }));
+  };
+
+
+  const createSeedHandler = (
+    action: () => Promise<{ success: boolean; message?: string }>,
+    loadingKey: keyof LoadingStates,
+    successTitle: string,
+    errorTitle: string
+  ) => async () => {
+    setLoadingStates(prev => ({ ...prev, [loadingKey]: true }));
+    toast({ title: `Seeding ${loadingKey.replace('seeding', '')}...`, description: 'Please wait.' });
+    const result = await action();
+    if (result.success) {
+      toast({ title: successTitle, description: result.message });
+      // Optionally, refresh stats after seeding if relevant
+      if (loadingKey !== 'seedingBooks') await handleReloadStats();
+    } else {
+      toast({ title: errorTitle, description: result.message, variant: 'destructive' });
+    }
+    setLoadingStates(prev => ({ ...prev, [loadingKey]: false }));
+  };
+
+  const handleSeedBooks = createSeedHandler(handleSeedDatabase, 'seedingBooks', 'Books Seeded!', 'Error Seeding Books');
+  const handleSeedCartsAction = createSeedHandler(handleSeedUserCarts, 'seedingCarts', 'User Carts Seeded!', 'Error Seeding Carts');
+  const handleSeedDownloadsAction = createSeedHandler(handleSeedBookDownloads, 'seedingDownloads', 'Book Downloads Seeded!', 'Error Seeding Downloads');
+  const handleSeedOrdersAction = createSeedHandler(handleSeedOrders, 'seedingOrders', 'Orders Seeded!', 'Error Seeding Orders');
+
 
   const stats = [
-    { title: 'Total Books in Catalog', value: firebaseConfigured ? bookCount.toString() : 'N/A', icon: BookCopy, href: '/admin/books', description: 'Manage current book catalog' },
-    { title: 'Total Registered Users', value: firebaseConfigured ? userCount.toString() : 'N/A', icon: Users, href: '/admin/users', description: 'View registered users' },
-    { title: 'New Users (Today)', value: firebaseConfigured ? newUsersToday.toString() : 'N/A', icon: UserPlus, description: 'Users registered today' },
-    { title: 'Total Downloads', value: firebaseConfigured ? totalDownloads.toString() : 'N/A', icon: DownloadCloud, description: 'Total book PDF downloads' },
-    { title: 'Sales Overview', value: firebaseConfigured ? `$${totalSalesAmount.toFixed(2)} (${totalOrders} orders)` : 'N/A', icon: BarChart3, description: 'Mock sales data from orders' },
+    { title: 'Total Books in Catalog', value: firebaseConfigured ? dashboardData.bookCount.toString() : 'N/A', icon: BookCopy, href: '/admin/books', description: 'Manage current book catalog' },
+    { title: 'Total Registered Users', value: firebaseConfigured ? dashboardData.userCount.toString() : 'N/A', icon: Users, href: '/admin/users', description: 'View registered users' },
+    { title: 'New Users (Today)', value: firebaseConfigured ? dashboardData.newUsersToday.toString() : 'N/A', icon: UserPlus, description: 'Users signed up today' },
+    { title: 'Total Downloads', value: firebaseConfigured ? dashboardData.totalDownloads.toString() : 'N/A', icon: DownloadCloud, description: 'Total book PDF downloads recorded' },
+    { title: 'Sales Overview', value: firebaseConfigured ? `$${dashboardData.totalSalesAmount.toFixed(2)} (${dashboardData.totalOrders} orders)` : 'N/A', icon: BarChart3, description: 'Mock sales data from orders' },
   ];
+
+
+  if (isInitialLoading && firebaseConfigured) {
+    return (
+        <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <p className="ml-4 text-lg text-muted-foreground">Loading dashboard...</p>
+        </div>
+    );
+  }
+  
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-3xl font-headline font-bold text-primary">Admin Dashboard</h1>
+         <Button onClick={handleReloadStats} variant="outline" disabled={!firebaseConfigured || loadingStates.reloadingStats}>
+            {loadingStates.reloadingStats ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Refresh Stats
+        </Button>
       </div>
 
       {!firebaseConfigured && (
@@ -80,15 +195,14 @@ export default async function AdminDashboardPage() {
         />
       )}
 
-      {firebaseConfigured && generalFetchError && (
+      {firebaseConfigured && dashboardData.fetchError && (
          <ErrorDisplay 
           title="Error Loading Dashboard Data"
-          message={detailedErrorMessage || generalFetchError}
-          retryAction={handleRetry}
+          message={dashboardData.detailedErrorMessage || dashboardData.fetchError}
         />
       )}
 
-      {firebaseConfigured && !generalFetchError && (
+      {firebaseConfigured && !dashboardData.fetchError && (
         <>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {stats.map((stat) => (
@@ -105,8 +219,8 @@ export default async function AdminDashboardPage() {
                       <Link href={stat.href}>View Details</Link>
                     </Button>
                   )}
-                  {stat.href === '#' && stat.value !== 'N/A' && (
-                    <p className="text-xs text-blue-500 mt-2">Feature coming soon.</p>
+                   {stat.href === '#' && stat.value !== 'N/A' && (
+                    <p className="text-xs text-primary mt-2">Feature coming soon.</p>
                   )}
                 </CardContent>
               </Card>
@@ -118,10 +232,100 @@ export default async function AdminDashboardPage() {
                   <CardTitle className="flex items-center">
                       <Database className="mr-2 h-5 w-5"/> Database Actions
                   </CardTitle>
-                  <CardDescription>Seed the book database with mock data. User creation is via signup.</CardDescription>
+                  <CardDescription>Seed the database with mock data. Users are created via signup. Tracking data can also be seeded.</CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col sm:flex-row gap-4">
-                  <SeedDatabaseButton />
+              <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
+                 <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="outline" disabled={loadingStates.seedingBooks || !firebaseConfigured}>
+                            {loadingStates.seedingBooks ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BookCopy className="mr-2 h-4 w-4" />}
+                            Seed Book Catalog
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>Seed Book Catalog?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will add/overwrite books from `src/data/books.ts` to Firestore.
+                        </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                        <AlertDialogCancel disabled={loadingStates.seedingBooks}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSeedBooks} disabled={loadingStates.seedingBooks} className="bg-orange-500 hover:bg-orange-600">
+                            {loadingStates.seedingBooks ? 'Seeding...' : 'Yes, Seed Books'}
+                        </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="outline" disabled={loadingStates.seedingCarts || !firebaseConfigured}>
+                            {loadingStates.seedingCarts ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShoppingCart className="mr-2 h-4 w-4" />}
+                            Seed User Carts
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>Seed User Carts?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will add mock cart items to users found by email from `src/data/mock-tracking-data.ts`.
+                        </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                        <AlertDialogCancel disabled={loadingStates.seedingCarts}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSeedCartsAction} disabled={loadingStates.seedingCarts} className="bg-blue-500 hover:bg-blue-600">
+                            {loadingStates.seedingCarts ? 'Seeding...' : 'Yes, Seed Carts'}
+                        </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                 <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="outline" disabled={loadingStates.seedingDownloads || !firebaseConfigured}>
+                            {loadingStates.seedingDownloads ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <History className="mr-2 h-4 w-4" />}
+                            Seed Download History
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>Seed Download History?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will add mock download records from `src/data/mock-tracking-data.ts`.
+                        </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                        <AlertDialogCancel disabled={loadingStates.seedingDownloads}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSeedDownloadsAction} disabled={loadingStates.seedingDownloads} className="bg-green-500 hover:bg-green-600">
+                            {loadingStates.seedingDownloads ? 'Seeding...' : 'Yes, Seed Downloads'}
+                        </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="outline" disabled={loadingStates.seedingOrders || !firebaseConfigured}>
+                            {loadingStates.seedingOrders ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PackageOpen className="mr-2 h-4 w-4" />}
+                            Seed Order History
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>Seed Order History?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                           This will add mock order records from `src/data/mock-tracking-data.ts`.
+                        </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                        <AlertDialogCancel disabled={loadingStates.seedingOrders}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSeedOrdersAction} disabled={loadingStates.seedingOrders} className="bg-purple-500 hover:bg-purple-600">
+                            {loadingStates.seedingOrders ? 'Seeding...' : 'Yes, Seed Orders'}
+                        </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
               </CardContent>
           </Card>
 
@@ -130,7 +334,7 @@ export default async function AdminDashboardPage() {
               <CardTitle>Quick Actions</CardTitle>
               <CardDescription>Common administrative tasks for the book catalog.</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col sm:flex-row gap-4">
+            <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
               <Button asChild disabled={!firebaseConfigured}>
                 <Link href="/admin/books/add">Add New Book</Link>
               </Button>
@@ -157,7 +361,7 @@ export default async function AdminDashboardPage() {
         <p className="font-bold flex items-center"><AlertTriangle className="mr-2 h-5 w-5" />Important: Data Persistence Note</p>
         <p>- <strong className="text-green-700">PDF & Cover Image Files:</strong> Uploaded files are persisted in Firebase Storage.</p>
         <p>- <strong className="text-green-700">Book, User, Cart, Order, Download Metadata:</strong> Information is managed in Firebase Firestore and will persist.</p>
-        <p className="mt-2">- The "Seed Database" action populates the 'books' collection. Users are created via signup.</p>
+        <p className="mt-2">- The "Seed Database" actions populate their respective collections. Users are created via signup.</p>
       </div>
     </div>
   );

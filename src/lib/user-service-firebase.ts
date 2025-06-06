@@ -12,6 +12,7 @@ import {
   writeBatch,
   Timestamp,
   getCountFromServer,
+  limit, // Import limit
 } from 'firebase/firestore';
 
 const USERS_COLLECTION = 'users';
@@ -108,6 +109,25 @@ export const getAllUsersFromDb = async (): Promise<User[]> => {
   }
 };
 
+// Helper function to get user UID by email
+export const getUserIdByEmail = async (email: string): Promise<string | null> => {
+  if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+    console.warn("Firebase Project ID not configured. Cannot fetch user by email.");
+    return null;
+  }
+  try {
+    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email.toLowerCase()), limit(1));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      return querySnapshot.docs[0].id; // Document ID is the UID
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error fetching user UID by email ${email}:`, error);
+    return null;
+  }
+};
+
 // The addUserToDb function as previously defined might be redundant if createUserDocumentInDb serves the purpose.
 // If it was for adding users manually via admin, it would need adjustment or could be removed if signup is the only path.
 // For now, I'll comment it out to avoid confusion with createUserDocumentInDb which is tied to UID.
@@ -116,7 +136,7 @@ export const addUserToDb = async (userData: { name: string; email: string; role?
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
     throw new Error("Firebase Project ID not configured.");
   }
-  // This function would need to be re-evaluated. If users are only created via Firebase Auth signup,
+  // This function would need to be re-evaluated. If users are only created via Firebase Auth,
   // then their ID should be their UID. If this is for manual admin additions, it needs a strategy for ID.
   const newUserRef = await addDoc(collection(db, USERS_COLLECTION), {
     name: userData.name,
@@ -136,3 +156,4 @@ export const addUserToDb = async (userData: { name: string; email: string; role?
 
 // SeedUsersToFirestore is removed as per user request.
 // getUserByEmailFromDb is removed as we now primarily fetch by UID after authentication.
+
