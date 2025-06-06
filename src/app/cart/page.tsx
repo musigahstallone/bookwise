@@ -7,16 +7,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Trash2, ShoppingBag, XCircle, Loader2 } from 'lucide-react'; // Added Loader2
+import { Trash2, ShoppingBag, XCircle, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { useState } from 'react'; // Added useState
+import { useState } from 'react';
 
 export default function CartPage() {
   const { cartItems, removeFromCart, clearCart, getCartTotal, getItemCount } = useCart();
   const router = useRouter();
   const { toast } = useToast();
-  const [isCheckingOut, setIsCheckingOut] = useState(false); // State for loading
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   const handleCheckout = async () => {
     if (cartItems.length === 0) {
@@ -37,7 +37,8 @@ export default function CartPage() {
     // Simulate payment processing delay
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Store items in sessionStorage before clearing cart
+    // Store items in sessionStorage before redirecting
+    // The cart will be cleared by the order-summary page after it loads the items.
     try {
         sessionStorage.setItem('lastPurchasedItems', JSON.stringify(cartItems));
     } catch (error) {
@@ -51,7 +52,8 @@ export default function CartPage() {
         return;
     }
     
-    clearCart(true); // Clear cart silently
+    // DO NOT clear cart here. It will be cleared by the order-summary page.
+    // clearCart(true); 
 
     toast({
       title: "Mock Checkout Successful!",
@@ -59,10 +61,12 @@ export default function CartPage() {
     });
     
     router.push(`/order-summary`);
-    // setIsCheckingOut will effectively be false on new page load, or reset if user navigates back.
+    // setIsCheckingOut will be reset if user navigates back or on new page load.
+    // If they navigate back immediately before order-summary clears, cart will still have items.
+    // This is acceptable for mock.
   };
 
-  if (cartItems.length === 0 && !isCheckingOut) { // Added !isCheckingOut to prevent flash of empty message
+  if (cartItems.length === 0 && !isCheckingOut) {
     return (
       <div className="text-center py-20">
         <ShoppingBag className="mx-auto h-24 w-24 text-muted-foreground mb-6" />

@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { CheckCircle, Download, ShoppingBag, Loader2, AlertTriangle } from 'lucide-react';
 import type { Book } from '@/data/books';
+import { useCart } from '@/contexts/CartContext'; // Import useCart
 
-// This interface should match CartItem from CartContext if it has specific fields
 interface PurchasedItem extends Book {
   // quantity is implicitly 1 for PDFs as per CartContext logic
 }
@@ -18,14 +18,18 @@ export default function OrderSummaryPage() {
   const [purchasedItems, setPurchasedItems] = useState<PurchasedItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { clearCart } = useCart(); // Get clearCart function from context
 
   useEffect(() => {
     const itemsJson = sessionStorage.getItem('lastPurchasedItems');
     if (itemsJson) {
       try {
         const items = JSON.parse(itemsJson) as PurchasedItem[];
-        if (Array.isArray(items)) {
+        if (Array.isArray(items) && items.length > 0) { // Ensure items is an array and not empty
           setPurchasedItems(items);
+          clearCart(true); // Clear the cart after successfully loading items for summary
+        } else if (items.length === 0) { // If cart was empty at checkout but somehow reached here
+          setError("No items were in your cart at checkout.");
         } else {
           setError("Invalid order data found.");
         }
@@ -37,8 +41,10 @@ export default function OrderSummaryPage() {
         sessionStorage.removeItem('lastPurchasedItems'); // Also remove if parsing fails
       }
     }
+    // If itemsJson is null, it means no purchase was made or sessionStorage was cleared,
+    // so purchasedItems will remain empty, and the appropriate message will be shown.
     setIsLoading(false);
-  }, []);
+  }, [clearCart]); // Add clearCart to dependency array
 
   if (isLoading) {
     return (
@@ -68,7 +74,7 @@ export default function OrderSummaryPage() {
         <ShoppingBag className="h-24 w-24 text-muted-foreground mb-6" />
         <h1 className="text-3xl font-headline font-bold text-primary mb-4">No Order Details Found</h1>
         <p className="text-lg text-muted-foreground mb-8 max-w-md">
-          It looks like your previous order session has ended or no purchase was completed.
+          It looks like your previous order session has ended, no purchase was completed, or your cart was empty.
         </p>
         <Button asChild size="lg">
           <Link href="/shop">Continue Shopping</Link>
@@ -130,4 +136,3 @@ export default function OrderSummaryPage() {
     </div>
   );
 }
-
