@@ -15,9 +15,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, UploadCloud, AlertTriangle, ImagePlus, FileText } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { storage } from '@/lib/firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject, uploadBytesResumable, type UploadTask } from 'firebase/storage';
 import { handleAddBook, handleUpdateBook } from '@/lib/actions/bookActions';
 import Image from 'next/image';
+import { cn } from "@/lib/utils";
 
 const currentYear = new Date().getFullYear();
 
@@ -44,13 +45,15 @@ interface BookFormProps {
 export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // General form submission loading state
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
   const [coverFileName, setCoverFileName] = useState<string | null>(null);
-  const [currentCoverImageUrl, setCurrentCoverImageUrl] = useState<string | null>(bookToEdit?.coverImageUrl || 'https://placehold.co/300x300.png');
+  const [currentCoverImageUrl, setCurrentCoverImageUrl] = useState<string | null>(null);
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
+  const [pdfUploadTask, setPdfUploadTask] = useState<UploadTask | null>(null);
+  const [pdfUploadError, setPdfUploadError] = useState<string | null>(null);
 
 
   const isEditMode = !!bookId && !!bookToEdit;
@@ -84,11 +87,11 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
         ...bookToEdit,
         longDescription: bookToEdit.longDescription || '',
         dataAiHint: bookToEdit.dataAiHint || 'book cover',
-        pdfFile: null,
+        pdfFile: null, // Reset file inputs
         coverImageFile: null,
       });
       setCurrentCoverImageUrl(bookToEdit.coverImageUrl || 'https://placehold.co/300x300.png');
-      setCoverPreviewUrl(null); // Clear file preview when resetting form for edit
+      setCoverPreviewUrl(null);
 
       if (bookToEdit.pdfUrl && bookToEdit.pdfUrl.includes('firebasestorage.googleapis.com')) {
         try {
@@ -97,7 +100,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
           const encodedFileName = pathParts[pathParts.length - 1];
           const decodedFileNameWithFolder = decodeURIComponent(encodedFileName);
           const actualFileName = decodedFileNameWithFolder.substring(decodedFileNameWithFolder.indexOf('/') + 1);
-          setPdfFileName(actualFileName.split('?')[0]);
+          setPdfFileName(actualFileName.split('?')[0] || 'Uploaded PDF');
         } catch (e) { setPdfFileName('Uploaded PDF'); }
       } else {
         setPdfFileName(null);
@@ -114,6 +117,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
         } catch (e) { setCoverFileName('Uploaded Cover'); }
       } else {
         setCoverFileName(null);
+        setCurrentCoverImageUrl('https://placehold.co/300x300.png'); // Default if no existing cover
       }
 
     } else {
@@ -127,12 +131,15 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
 
   const handlePdfFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    setPdfUploadError(null); // Reset error when new file is chosen
     if (file) {
       form.setValue('pdfFile', file);
       setPdfFileName(file.name);
     } else {
       form.setValue('pdfFile', null);
-      setPdfFileName(isEditMode && bookToEdit?.pdfUrl ? 'Using existing PDF' : null);
+      // If deselecting, show "Using existing PDF" only if relevant
+      const hasExistingPdf = isEditMode && bookToEdit?.pdfUrl && bookToEdit.pdfUrl !== '/pdfs/placeholder-book.pdf';
+      setPdfFileName(hasExistingPdf ? 'Using existing PDF' : null);
     }
   };
 
@@ -148,11 +155,13 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
       reader.readAsDataURL(file);
     } else {
       form.setValue('coverImageFile', null);
-      setCoverFileName(isEditMode && bookToEdit?.coverImageUrl ? 'Using existing cover' : null);
-      setCoverPreviewUrl(null); // Clear preview if file is removed
+      const hasExistingCover = isEditMode && bookToEdit?.coverImageUrl && bookToEdit.coverImageUrl !== 'https://placehold.co/300x300.png';
+      setCoverFileName(hasExistingCover ? 'Using existing cover' : null);
+      setCoverPreviewUrl(null);
     }
   };
   
+  // Simple upload for cover image (no cancel)
   const uploadFileToStorage = async (file: File, pathPrefix: string): Promise<string> => {
     const safeFileName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
     const uniqueFileName = `${pathPrefix}/${Date.now()}-${safeFileName}`;
@@ -167,24 +176,72 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
         toast({ title: 'Configuration Error', description: 'Firebase is not configured. Cannot save book.', variant: 'destructive' });
         return;
     }
-    setIsLoading(true);
+    setIsLoading(true); // General loading state for the whole submission
+    setPdfUploadError(null);
+
     let finalPdfUrl = isEditMode ? bookToEdit?.pdfUrl : '/pdfs/placeholder-book.pdf';
     let finalCoverImageUrl = isEditMode ? bookToEdit?.coverImageUrl : 'https://placehold.co/300x300.png';
 
     // Upload PDF
     if (data.pdfFile) {
       setIsUploadingPdf(true);
-      toast({ title: 'Uploading PDF...', description: 'Please wait.' });
+      toast({ title: 'Starting PDF Upload...', description: 'Please wait.' });
+
+      const file = data.pdfFile;
+      const safeFileName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
+      const uniquePdfFileName = `book_pdfs/${Date.now()}-${safeFileName}`;
+      const pdfFileRef = storageRef(storage, uniquePdfFileName);
+      
+      const uploadTaskInstance = uploadBytesResumable(pdfFileRef, file);
+      setPdfUploadTask(uploadTaskInstance);
+
       try {
-        finalPdfUrl = await uploadFileToStorage(data.pdfFile, 'book_pdfs');
-        toast({ title: 'PDF Upload Successful', description: 'PDF ready.' });
+        finalPdfUrl = await new Promise<string>((resolve, reject) => {
+          uploadTaskInstance.on(
+            'state_changed',
+            (snapshot) => { /* Progress handling can be added here if needed */ },
+            (error) => { // Handle unsuccessful uploads
+              setPdfUploadTask(null);
+              setIsUploadingPdf(false);
+              let errorMessage = "PDF upload failed. Please try again.";
+              if (error.code === 'storage/canceled') {
+                errorMessage = "PDF upload was canceled.";
+                toast({ title: 'Upload Canceled', description: errorMessage, variant: 'default' });
+              } else if (error.code === 'storage/unauthorized') {
+                errorMessage = "PDF upload failed: Unauthorized. Check Firebase Storage rules.";
+                toast({ title: 'Upload Failed', description: errorMessage, variant: 'destructive' });
+              } else {
+                 toast({ title: 'Upload Failed', description: error.message || errorMessage, variant: 'destructive' });
+              }
+              console.error('Error uploading PDF:', error);
+              setPdfUploadError(errorMessage);
+              reject(new Error(errorMessage));
+            },
+            async () => { // Handle successful uploads on complete
+              try {
+                const downloadURL = await getDownloadURL(uploadTaskInstance.snapshot.ref);
+                setPdfUploadTask(null);
+                toast({ title: 'PDF Upload Successful', description: 'PDF ready.' });
+                resolve(downloadURL);
+              } catch (getUrlError) {
+                 setPdfUploadTask(null);
+                 setIsUploadingPdf(false); // Ensure this is reset
+                 console.error('Error getting download URL:', getUrlError);
+                 const errMessage = "Failed to get PDF download URL after upload.";
+                 setPdfUploadError(errMessage);
+                 toast({ title: 'Upload Error', description: errMessage, variant: 'destructive' });
+                 reject(new Error(errMessage));
+              }
+            }
+          );
+        });
       } catch (error) {
-        console.error('Error uploading PDF:', error);
-        toast({ title: 'PDF Upload Failed', description: String(error), variant: 'destructive' });
-        setIsLoading(false); setIsUploadingPdf(false);
-        return;
+        // This catch block handles the rejection from the Promise wrapping the upload task
+        // isUploadingPdf should already be false from the error handler
+        setIsLoading(false);
+        return; // Stop the submission process
       }
-      setIsUploadingPdf(false);
+      setIsUploadingPdf(false); // PDF upload phase is done (successfully)
     }
 
     // Upload Cover Image
@@ -197,19 +254,29 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
       } catch (error) {
         console.error('Error uploading cover image:', error);
         toast({ title: 'Cover Image Upload Failed', description: String(error), variant: 'destructive' });
-        setIsLoading(false); setIsUploadingCover(false);
+        setIsUploadingCover(false);
+        setIsLoading(false);
         return;
       }
       setIsUploadingCover(false);
     }
     
     const bookDataForAction = {
-      ...data,
-      pdfUrl: finalPdfUrl!, // Assert non-null as it will have a default or uploaded value
-      coverImageUrl: finalCoverImageUrl!, // Assert non-null
+      title: data.title,
+      author: data.author,
+      category: data.category,
+      description: data.description,
+      longDescription: data.longDescription || '',
+      price: data.price,
+      publishedYear: data.publishedYear,
+      dataAiHint: data.dataAiHint || 'book cover',
+      pdfUrl: finalPdfUrl,
+      coverImageUrl: finalCoverImageUrl,
     };
     
-    const { pdfFile, coverImageFile, ...actionPayload } = bookDataForAction;
+    // The Omit type is complex here, let's cast to any temporarily for the action payload
+    // as the server action expects a specific shape.
+    const { ...actionPayload } = bookDataForAction;
 
     let result;
     if (isEditMode && bookId) {
@@ -227,6 +294,15 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
     }
     setIsLoading(false);
   };
+
+  const handleCancelPdfUpload = () => {
+    if (pdfUploadTask) {
+      pdfUploadTask.cancel();
+      // The toast and state updates (isUploadingPdf=false, pdfUploadTask=null, pdfUploadError)
+      // are handled by the error callback of the uploadTask in onSubmit.
+    }
+  };
+
 
   if (!firebaseConfigured && !isEditMode) {
     return (
@@ -253,6 +329,15 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
   }
 
   const displayCoverUrl = coverPreviewUrl || currentCoverImageUrl;
+
+  let submitButtonText = isEditMode ? 'Save Changes' : 'Add Book';
+  if (isUploadingPdf) {
+    submitButtonText = 'Uploading PDF...';
+  } else if (isUploadingCover) {
+    submitButtonText = 'Uploading Cover...';
+  } else if (isLoading) { // Now means server action is running or other general loading
+    submitButtonText = isEditMode ? 'Saving Changes...' : 'Adding Book...';
+  }
 
   return (
     <Card className="shadow-xl">
@@ -281,7 +366,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Title</FormLabel>
-                    <FormControl><Input placeholder="Book Title" {...field} /></FormControl>
+                    <FormControl><Input placeholder="Book Title" {...field} disabled={isLoading} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -292,7 +377,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Author</FormLabel>
-                    <FormControl><Input placeholder="Author Name" {...field} /></FormControl>
+                    <FormControl><Input placeholder="Author Name" {...field} disabled={isLoading}/></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -304,7 +389,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Category</FormLabel>
-                  <FormControl><Input placeholder="e.g., Fiction, Science" {...field} /></FormControl>
+                  <FormControl><Input placeholder="e.g., Fiction, Science" {...field} disabled={isLoading} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -315,7 +400,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Short Description</FormLabel>
-                  <FormControl><Textarea placeholder="A brief summary of the book..." {...field} /></FormControl>
+                  <FormControl><Textarea placeholder="A brief summary of the book..." {...field} disabled={isLoading} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -326,7 +411,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Long Description (Optional)</FormLabel>
-                  <FormControl><Textarea placeholder="A more detailed description..." rows={5} {...field} value={field.value ?? ''} /></FormControl>
+                  <FormControl><Textarea placeholder="A more detailed description..." rows={5} {...field} value={field.value ?? ''} disabled={isLoading} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -338,7 +423,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Price ($)</FormLabel>
-                    <FormControl><Input type="number" step="0.01" placeholder="e.g., 19.99" {...field} /></FormControl>
+                    <FormControl><Input type="number" step="0.01" placeholder="e.g., 19.99" {...field} disabled={isLoading} /></FormControl>
                     <FormMessage />
                     </FormItem>
                 )}
@@ -349,7 +434,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Published Year</FormLabel>
-                    <FormControl><Input type="number" placeholder="e.g., 2023" {...field} /></FormControl>
+                    <FormControl><Input type="number" placeholder="e.g., 2023" {...field} disabled={isLoading} /></FormControl>
                     <FormMessage />
                     </FormItem>
                 )}
@@ -369,7 +454,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                   )}
                   <FormControl>
                     <div className="flex items-center space-x-2">
-                       <label htmlFor="cover-image-upload" className="cursor-pointer inline-flex items-center px-4 py-2 border border-input bg-background rounded-md text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground">
+                       <label htmlFor="cover-image-upload" className={cn("cursor-pointer inline-flex items-center px-4 py-2 border border-input bg-background rounded-md text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground", (isUploadingCover || isLoading) && "opacity-50 cursor-not-allowed")}>
                         <ImagePlus className="mr-2 h-4 w-4" />
                         {coverFileName ? 'Change Cover' : 'Choose Cover Image'}
                       </label>
@@ -379,6 +464,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                         accept="image/png, image/jpeg, image/webp"
                         onChange={handleCoverFileChange}
                         className="hidden"
+                        disabled={isUploadingCover || isLoading}
                       />
                       {coverFileName && <span className="text-sm text-muted-foreground truncate max-w-xs">{coverFileName}</span>}
                     </div>
@@ -397,7 +483,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                   <FormLabel>Book PDF File</FormLabel>
                   <FormControl>
                     <div className="flex items-center space-x-2">
-                       <label htmlFor="pdf-upload" className="cursor-pointer inline-flex items-center px-4 py-2 border border-input bg-background rounded-md text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground">
+                       <label htmlFor="pdf-upload" className={cn("cursor-pointer inline-flex items-center px-4 py-2 border border-input bg-background rounded-md text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground", (isUploadingPdf || isLoading) && "opacity-50 cursor-not-allowed")}>
                         <FileText className="mr-2 h-4 w-4" />
                         {pdfFileName ? 'Change PDF' : 'Choose PDF'}
                       </label>
@@ -407,12 +493,21 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
                         accept=".pdf"
                         onChange={handlePdfFileChange}
                         className="hidden"
+                        disabled={isUploadingPdf || isLoading}
                       />
                       {pdfFileName && <span className="text-sm text-muted-foreground truncate max-w-xs">{pdfFileName}</span>}
                     </div>
                   </FormControl>
                   <FormDescription>Upload the book's PDF file. This will be stored in Firebase Storage. Max 50MB recommended.</FormDescription>
                   <FormMessage />
+                   {isUploadingPdf && !pdfUploadError && (
+                    <Button type="button" variant="outline" size="sm" onClick={handleCancelPdfUpload} className="mt-2">
+                      Cancel PDF Upload
+                    </Button>
+                  )}
+                  {pdfUploadError && (
+                    <p className="text-sm font-medium text-destructive mt-2">{pdfUploadError}</p>
+                  )}
                 </FormItem>
               )}
             />
@@ -423,19 +518,19 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>AI Hint for Cover Image (Optional)</FormLabel>
-                  <FormControl><Input placeholder="e.g., fantasy dragon" {...field} value={field.value ?? ''} /></FormControl>
+                  <FormControl><Input placeholder="e.g., fantasy dragon" {...field} value={field.value ?? ''} disabled={isLoading} /></FormControl>
                   <FormDescription>One or two keywords for AI image generation if applicable (max 2 words). Default: book cover</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <div className="flex space-x-3 justify-end pt-4">
-              <Button type="button" variant="outline" onClick={() => router.back()} disabled={isLoading || isUploadingPdf || isUploadingCover}>
+              <Button type="button" variant="outline" onClick={() => router.back()} disabled={isLoading}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isLoading || isUploadingPdf || isUploadingCover || !firebaseConfigured} className="bg-primary hover:bg-primary/90">
-                {(isLoading || isUploadingPdf || isUploadingCover) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isUploadingPdf ? 'Uploading PDF...' : isUploadingCover ? 'Uploading Cover...' : (isEditMode ? 'Save Changes' : 'Add Book')}
+              <Button type="submit" disabled={isLoading || !firebaseConfigured} className="bg-primary hover:bg-primary/90">
+                {(isUploadingPdf || isUploadingCover || isLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {submitButtonText}
               </Button>
             </div>
           </form>
@@ -444,3 +539,4 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
     </Card>
   );
 }
+
