@@ -12,13 +12,13 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 import { useRegion } from '@/contexts/RegionContext';
-import { useAuth } from '@/contexts/AuthContext'; // Added
-import { handleCreateOrder } from '@/lib/actions/trackingActions'; // Added
+import { useAuth } from '@/contexts/AuthContext';
+import { handleCreateOrder, type OrderItemInput } from '@/lib/actions/trackingActions';
 
 export default function CartPage() {
-  const { cartItems, removeFromCart, clearCart, getCartTotal, getItemCount, isLoading: cartIsLoading } = useCart(); // Added cartIsLoading
+  const { cartItems, removeFromCart, clearCart, getCartTotal, getItemCount, isLoading: cartIsLoading } = useCart();
   const { selectedRegion, formatPrice } = useRegion();
-  const { currentUser } = useAuth(); // Added
+  const { currentUser, isLoading: authIsLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -49,25 +49,17 @@ export default function CartPage() {
       description: "Please wait a moment.",
     });
 
-    // Simulate payment processing delay (optional)
-    // await new Promise(resolve => setTimeout(resolve, 1000)); 
+    const orderItems: OrderItemInput[] = cartItems.map(item => ({
+        bookId: item.id,
+        title: item.title,
+        price: item.price, // Price at time of purchase
+        // quantity is implicitly 1
+    }));
 
     try {
       const orderResult = await handleCreateOrder(
         currentUser.uid,
-        cartItems.map(item => ({ // Map to the structure expected by handleCreateOrder
-            id: item.id,
-            title: item.title,
-            author: item.author,
-            price: item.price,
-            coverImageUrl: item.coverImageUrl,
-            pdfUrl: item.pdfUrl,
-            dataAiHint: item.dataAiHint,
-            publishedYear: item.publishedYear,
-            category: item.category,
-            description: item.description,
-            longDescription: item.longDescription
-        })),
+        orderItems,
         getCartTotal(),
         selectedRegion.code,
         selectedRegion.currencyCode,
@@ -75,15 +67,24 @@ export default function CartPage() {
       );
 
       if (orderResult.success) {
-        sessionStorage.setItem('lastPurchasedItems', JSON.stringify(cartItems));
+        // Store simplified items for order summary display
+        const purchasedItemsForSummary = cartItems.map(item => ({
+            id: item.id,
+            title: item.title,
+            author: item.author, // Keep author for display on summary
+            price: item.price,
+            coverImageUrl: item.coverImageUrl,
+            pdfUrl: item.pdfUrl,
+            dataAiHint: item.dataAiHint,
+        }));
+        sessionStorage.setItem('lastPurchasedItems', JSON.stringify(purchasedItemsForSummary));
         sessionStorage.setItem('lastPurchasedRegionCode', selectedRegion.code);
         
         toast({
           title: "Mock Checkout Successful!",
           description: "Your order has been recorded. Redirecting to your order summary...",
         });
-        // Clear Firestore cart AFTER successful order creation and session storage
-        await clearCart(true); // silent clear
+        await clearCart(true); 
         router.push(`/order-summary`);
       } else {
         toast({
@@ -104,7 +105,7 @@ export default function CartPage() {
     }
   };
   
-  if (cartIsLoading && currentUser) { // Show loader if cart is loading for an authenticated user
+  if (cartIsLoading || authIsLoading) { 
     return (
       <div className="flex flex-col items-center justify-center text-center py-20 min-h-[60vh]">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -113,7 +114,7 @@ export default function CartPage() {
     );
   }
 
-  if (!currentUser && !cartIsLoading) { // Prompt login if not logged in
+  if (!currentUser) { 
     return (
       <div className="text-center py-20">
         <ShoppingBag className="mx-auto h-24 w-24 text-muted-foreground mb-6" />
@@ -129,7 +130,7 @@ export default function CartPage() {
   }
 
 
-  if (cartItems.length === 0 && !isCheckingOut && currentUser) {
+  if (cartItems.length === 0 && !isCheckingOut) {
     return (
       <div className="text-center py-20">
         <ShoppingBag className="mx-auto h-24 w-24 text-muted-foreground mb-6" />

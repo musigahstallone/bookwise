@@ -3,15 +3,17 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, BookCopy, Users as UsersIcon, Settings } from 'lucide-react'; // Renamed Users to UsersIcon to avoid conflict
+import { Home, BookCopy, Users as UsersIcon, Settings, ShoppingCart, Download } from 'lucide-react'; 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: Home },
   { href: '/admin/books', label: 'Manage Books', icon: BookCopy },
-  { href: '/admin/users', label: 'Manage Users', icon: UsersIcon }, // Added Users link
-  // { href: '/admin/settings', label: 'Settings', icon: Settings }, // Example for future
+  { href: '/admin/users', label: 'Manage Users', icon: UsersIcon },
+  { href: '/admin/orders', label: 'View Orders', icon: ShoppingCart },
+  { href: '/admin/downloads', label: 'View Downloads', icon: Download },
+  // { href: '/admin/settings', label: 'Settings', icon: Settings }, 
 ];
 
 export default function AdminSidebar() {
@@ -20,7 +22,7 @@ export default function AdminSidebar() {
   return (
     <aside className={cn(
       "w-64 bg-card text-card-foreground border-r border-border flex-shrink-0 p-4",
-      "hidden md:flex flex-col" // Hide on mobile, show as flex column on md+
+      "hidden md:flex flex-col" 
     )}>
       <div className="mb-8">
         <Link href="/admin" className="flex items-center space-x-2 text-primary">

@@ -1,24 +1,23 @@
 
 import { db } from '@/lib/firebase';
-import type { User } from '@/data/users'; // Your custom User interface
+import type { User } from '@/data/users'; 
 import {
   collection,
   getDocs,
   doc,
   getDoc,
   setDoc,
+  updateDoc, // Added for updates
+  deleteDoc, // Added for delete
   query,
   where,
-  writeBatch,
   Timestamp,
   getCountFromServer,
-  limit, // Import limit
+  limit,
 } from 'firebase/firestore';
 
 const USERS_COLLECTION = 'users';
 
-// This function is for creating the user document in Firestore after Firebase Auth signup.
-// The document ID will be the Firebase Auth UID.
 export const createUserDocumentInDb = async (
   uid: string, 
   email: string, 
@@ -27,23 +26,22 @@ export const createUserDocumentInDb = async (
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
     throw new Error("Firebase Project ID not configured.");
   }
-  const userDocRef = doc(db, USERS_COLLECTION, uid); // Use UID as document ID
+  const userDocRef = doc(db, USERS_COLLECTION, uid); 
   const newUser: User = {
-    id: uid, // Store UID as id in Firestore doc as well for consistency
+    id: uid, 
     email: email.toLowerCase(),
     name: name,
-    role: 'user', // All new signups are 'user' by default
-    createdAt: new Date(), // Use client-side date, or Timestamp.now()
+    role: 'user', 
+    createdAt: new Date(), 
   };
 
-  // Convert Date to Firestore Timestamp before saving
   const dataToSave = {
     ...newUser,
     createdAt: Timestamp.fromDate(newUser.createdAt)
   };
   
   await setDoc(userDocRef, dataToSave);
-  return newUser; // Return the user object with client-side Date
+  return newUser; 
 };
 
 
@@ -62,7 +60,6 @@ export const countUsersInDb = async (): Promise<number> => {
   }
 };
 
-// Fetches the user document from Firestore using UID
 export const getUserDocumentFromDb = async (uid: string): Promise<User | null> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
     console.warn("Firebase Project ID not configured. Returning null for user fetch.");
@@ -74,7 +71,6 @@ export const getUserDocumentFromDb = async (uid: string): Promise<User | null> =
 
     if (userDocSnap.exists()) {
       const userData = userDocSnap.data();
-      // Convert Firestore Timestamp back to JS Date object
       if (userData.createdAt && userData.createdAt instanceof Timestamp) {
         userData.createdAt = userData.createdAt.toDate();
       }
@@ -109,7 +105,6 @@ export const getAllUsersFromDb = async (): Promise<User[]> => {
   }
 };
 
-// Helper function to get user UID by email
 export const getUserIdByEmail = async (email: string): Promise<string | null> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
     console.warn("Firebase Project ID not configured. Cannot fetch user by email.");
@@ -119,7 +114,7 @@ export const getUserIdByEmail = async (email: string): Promise<string | null> =>
     const q = query(collection(db, USERS_COLLECTION), where("email", "==", email.toLowerCase()), limit(1));
     const querySnapshot = await getDocs(q);
     if (!querySnapshot.empty) {
-      return querySnapshot.docs[0].id; // Document ID is the UID
+      return querySnapshot.docs[0].id; 
     }
     return null;
   } catch (error) {
@@ -128,32 +123,37 @@ export const getUserIdByEmail = async (email: string): Promise<string | null> =>
   }
 };
 
-// The addUserToDb function as previously defined might be redundant if createUserDocumentInDb serves the purpose.
-// If it was for adding users manually via admin, it would need adjustment or could be removed if signup is the only path.
-// For now, I'll comment it out to avoid confusion with createUserDocumentInDb which is tied to UID.
-/*
-export const addUserToDb = async (userData: { name: string; email: string; role?: 'user' | 'admin' }): Promise<User> => {
+export const updateUserInDb = async (uid: string, updates: Partial<Pick<User, 'name' | 'role'>>): Promise<User | null> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
     throw new Error("Firebase Project ID not configured.");
   }
-  // This function would need to be re-evaluated. If users are only created via Firebase Auth,
-  // then their ID should be their UID. If this is for manual admin additions, it needs a strategy for ID.
-  const newUserRef = await addDoc(collection(db, USERS_COLLECTION), {
-    name: userData.name,
-    email: userData.email.toLowerCase(),
-    role: userData.role || 'user', 
-    createdAt: Timestamp.now(),
-  });
-  return {
-    id: newUserRef.id, // This is an auto-generated Firestore ID, not UID
-    name: userData.name,
-    email: userData.email.toLowerCase(),
-    role: userData.role || 'user',
-    createdAt: new Date() 
-  };
-};
-*/
+  const userDocRef = doc(db, USERS_COLLECTION, uid);
+  // Filter out undefined values from updates, Firestore doesn't like them
+  const validUpdates = Object.fromEntries(Object.entries(updates).filter(([_, v]) => v !== undefined));
+  
+  if (Object.keys(validUpdates).length === 0) {
+    // No actual updates to perform, return existing user data
+    return getUserDocumentFromDb(uid);
+  }
 
-// SeedUsersToFirestore is removed as per user request.
-// getUserByEmailFromDb is removed as we now primarily fetch by UID after authentication.
+  await updateDoc(userDocRef, validUpdates);
+  const updatedDoc = await getDoc(userDocRef);
+  if (updatedDoc.exists()) {
+    const userData = updatedDoc.data();
+     if (userData.createdAt && userData.createdAt instanceof Timestamp) {
+        userData.createdAt = userData.createdAt.toDate();
+      }
+    return { id: updatedDoc.id, ...userData } as User;
+  }
+  return null;
+};
+
+// Deletes only the Firestore document. Firebase Auth user deletion is separate and more complex.
+export const deleteUserFromDb = async (uid: string): Promise<void> => {
+  if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+    throw new Error("Firebase Project ID not configured.");
+  }
+  const userDocRef = doc(db, USERS_COLLECTION, uid);
+  await deleteDoc(userDocRef);
+};
 

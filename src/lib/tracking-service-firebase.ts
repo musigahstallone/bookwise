@@ -6,147 +6,120 @@ import {
   doc, 
   writeBatch, 
   Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  getDocs,
+  query,
+  orderBy
 } from 'firebase/firestore';
-import type { MockUserCartSeed, MockBookDownloadSeed, MockOrderSeed } from '@/data/mock-tracking-data';
-import { getUserIdByEmail } from './user-service-firebase'; // To find user UIDs
+// Mock data import removed
+// import type { MockUserCartSeed, MockBookDownloadSeed, MockOrderSeed } from '@/data/mock-tracking-data';
+import { getUserIdByEmail, getUserDocumentFromDb } from './user-service-firebase';
+import { getBookByIdFromDb } from './book-service-firebase';
+import type { User } from '@/data/users';
+import type { Book } from '@/data/books';
+import type { OrderItemInput } from './actions/trackingActions';
+
 
 const USERS_COLLECTION = 'users';
 const CART_ITEMS_SUBCOLLECTION = 'cartItems';
 const BOOK_DOWNLOADS_COLLECTION = 'bookDownloads';
 const ORDERS_COLLECTION = 'orders';
+const BOOKS_COLLECTION = 'books';
 
-export const seedUserCartsToDb = async (cartsToSeed: MockUserCartSeed[]): Promise<{ seededCount: number; skippedUsers: string[]; errors: any[] }> => {
+
+// Seeding functions removed as per request
+// export const seedUserCartsToDb = async ( ... ) => { ... };
+// export const seedBookDownloadsToDb = async ( ... ) => { ... };
+// export const seedOrdersToDb = async ( ... ) => { ... };
+
+
+export interface OrderWithUserDetails {
+  id: string;
+  userId: string;
+  userName?: string;
+  userEmail?: string;
+  items: OrderItemInput[];
+  totalAmountUSD: number;
+  orderDate: Date; // Converted from Timestamp
+  regionCode: string;
+  currencyCode: string;
+  itemCount: number;
+  status: string;
+}
+
+export const getAllOrdersWithUserDetailsFromDb = async (): Promise<OrderWithUserDetails[]> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
-    throw new Error("Firebase Project ID not configured for seeding carts.");
+    console.warn("Firebase Project ID not configured. Returning empty array for orders.");
+    return [];
   }
-  const batch = writeBatch(db);
-  let seededCount = 0;
-  const errors: any[] = [];
-  const skippedUsers: string[] = [];
-
-  for (const userCart of cartsToSeed) {
-    const userId = await getUserIdByEmail(userCart.userEmail);
-    if (!userId) {
-      console.warn(`User with email ${userCart.userEmail} not found. Skipping cart seeding for this user.`);
-      skippedUsers.push(userCart.userEmail);
-      continue;
-    }
-
-    for (const item of userCart.items) {
-      try {
-        // Use bookId as document ID for cart items to prevent duplicates
-        const cartItemRef = doc(db, USERS_COLLECTION, userId, CART_ITEMS_SUBCOLLECTION, item.bookId);
-        const cartItemData = {
-          ...item, // contains bookId, title, author, price, coverImageUrl, quantity
-          addedAt: serverTimestamp(), // Optional: track when item was added
-        };
-        batch.set(cartItemRef, cartItemData);
-        seededCount++;
-      } catch (error) {
-        console.error(`Error preparing cart item "${item.title}" for user ${userCart.userEmail} for batch seed:`, error);
-        errors.push({ userEmail: userCart.userEmail, itemTitle: item.title, error });
-      }
-    }
-  }
-
   try {
-    await batch.commit();
-    console.log(`Successfully seeded/updated ${seededCount} cart items.`);
-    return { seededCount, skippedUsers, errors };
+    const ordersQuery = query(collection(db, ORDERS_COLLECTION), orderBy('orderDate', 'desc'));
+    const ordersSnapshot = await getDocs(ordersQuery);
+    const ordersList: OrderWithUserDetails[] = [];
+
+    for (const orderDoc of ordersSnapshot.docs) {
+      const orderData = orderDoc.data();
+      const user = await getUserDocumentFromDb(orderData.userId);
+      
+      ordersList.push({
+        id: orderDoc.id,
+        userId: orderData.userId,
+        userName: user?.name,
+        userEmail: user?.email,
+        items: orderData.items as OrderItemInput[],
+        totalAmountUSD: orderData.totalAmountUSD,
+        orderDate: (orderData.orderDate as Timestamp).toDate(),
+        regionCode: orderData.regionCode,
+        currencyCode: orderData.currencyCode,
+        itemCount: orderData.itemCount,
+        status: orderData.status || 'completed',
+      });
+    }
+    return ordersList;
   } catch (error) {
-    console.error("Error committing cart seed batch to Firestore:", error);
-    errors.push({ general: "Batch commit failed for carts", error });
-    return { seededCount: 0, skippedUsers, errors };
+    console.error("Error fetching all orders from Firestore:", error);
+    return [];
   }
 };
 
+export interface DownloadWithDetails {
+  id: string;
+  userId: string;
+  userName?: string;
+  userEmail?: string;
+  bookId: string;
+  bookTitle?: string;
+  downloadedAt: Date; // Converted from Timestamp
+}
 
-export const seedBookDownloadsToDb = async (downloadsToSeed: MockBookDownloadSeed[]): Promise<{ seededCount: number; skippedUsers: string[]; errors: any[] }> => {
+export const getAllDownloadsWithDetailsFromDb = async (): Promise<DownloadWithDetails[]> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
-    throw new Error("Firebase Project ID not configured for seeding downloads.");
+    console.warn("Firebase Project ID not configured. Returning empty array for downloads.");
+    return [];
   }
-  const batch = writeBatch(db);
-  let seededCount = 0;
-  const errors: any[] = [];
-  const skippedUsers: string[] = [];
-
-  for (const download of downloadsToSeed) {
-    const userId = await getUserIdByEmail(download.userEmail);
-    if (!userId) {
-      console.warn(`User with email ${download.userEmail} not found. Skipping download seeding for this record.`);
-      skippedUsers.push(download.userEmail);
-      continue;
-    }
-    try {
-      const downloadRef = doc(collection(db, BOOK_DOWNLOADS_COLLECTION)); // Auto-generate ID
-      const downloadData = {
-        userId,
-        bookId: download.bookId,
-        downloadedAt: Timestamp.fromDate(download.downloadedAt),
-      };
-      batch.set(downloadRef, downloadData);
-      seededCount++;
-    } catch (error) {
-      console.error(`Error preparing download for book ${download.bookId} by user ${download.userEmail} for batch seed:`, error);
-      errors.push({ userEmail: download.userEmail, bookId: download.bookId, error });
-    }
-  }
-
   try {
-    await batch.commit();
-    console.log(`Successfully seeded ${seededCount} book download records.`);
-    return { seededCount, skippedUsers, errors };
-  } catch (error) {
-    console.error("Error committing download seed batch to Firestore:", error);
-    errors.push({ general: "Batch commit failed for downloads", error });
-    return { seededCount: 0, skippedUsers, errors };
-  }
-};
+    const downloadsQuery = query(collection(db, BOOK_DOWNLOADS_COLLECTION), orderBy('downloadedAt', 'desc'));
+    const downloadsSnapshot = await getDocs(downloadsQuery);
+    const downloadsList: DownloadWithDetails[] = [];
 
-
-export const seedOrdersToDb = async (ordersToSeed: MockOrderSeed[]): Promise<{ seededCount: number; skippedUsers: string[]; errors: any[] }> => {
-  if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
-    throw new Error("Firebase Project ID not configured for seeding orders.");
-  }
-  const batch = writeBatch(db);
-  let seededCount = 0;
-  const errors: any[] = [];
-  const skippedUsers: string[] = [];
-
-  for (const order of ordersToSeed) {
-    const userId = await getUserIdByEmail(order.userEmail);
-    if (!userId) {
-      console.warn(`User with email ${order.userEmail} not found. Skipping order seeding for this record.`);
-      skippedUsers.push(order.userEmail);
-      continue;
+    for (const downloadDoc of downloadsSnapshot.docs) {
+      const downloadData = downloadDoc.data();
+      const user = await getUserDocumentFromDb(downloadData.userId);
+      const book = await getBookByIdFromDb(downloadData.bookId);
+      
+      downloadsList.push({
+        id: downloadDoc.id,
+        userId: downloadData.userId,
+        userName: user?.name,
+        userEmail: user?.email,
+        bookId: downloadData.bookId,
+        bookTitle: book?.title,
+        downloadedAt: (downloadData.downloadedAt as Timestamp).toDate(),
+      });
     }
-    try {
-      const orderRef = doc(collection(db, ORDERS_COLLECTION)); // Auto-generate ID
-      const orderData = {
-        userId,
-        items: order.items, // Array of simplified book objects
-        totalAmountUSD: order.totalAmountUSD,
-        orderDate: Timestamp.fromDate(order.orderDate),
-        regionCode: order.regionCode,
-        currencyCode: order.currencyCode,
-        itemCount: order.itemCount,
-      };
-      batch.set(orderRef, orderData);
-      seededCount++;
-    } catch (error) {
-      console.error(`Error preparing order for user ${order.userEmail} for batch seed:`, error);
-      errors.push({ userEmail: order.userEmail, error });
-    }
-  }
-
-  try {
-    await batch.commit();
-    console.log(`Successfully seeded ${seededCount} order records.`);
-    return { seededCount, skippedUsers, errors };
+    return downloadsList;
   } catch (error) {
-    console.error("Error committing order seed batch to Firestore:", error);
-    errors.push({ general: "Batch commit failed for orders", error });
-    return { seededCount: 0, skippedUsers, errors };
+    console.error("Error fetching all downloads from Firestore:", error);
+    return [];
   }
 };

@@ -47,8 +47,8 @@ export const getDashboardStats = async (): Promise<{
       );
       const newUsersSnapshot = await getCountFromServer(usersQuery);
       newUsersToday = newUsersSnapshot.data().count;
-    } catch (userError) {
-      console.error("Admin Dashboard: Error fetching new users count. Returning 0. Details:", userError);
+    } catch (userError: any) {
+      console.error("Admin Dashboard: Error fetching new users count. Returning 0. Details:", userError.message);
       // newUsersToday remains 0
     }
     
@@ -57,8 +57,8 @@ export const getDashboardStats = async (): Promise<{
     try {
       const downloadsSnapshot = await getCountFromServer(collection(db, BOOK_DOWNLOADS_COLLECTION));
       totalDownloads = downloadsSnapshot.data().count;
-    } catch (downloadError) {
-        console.error("Admin Dashboard: Error fetching total downloads count. Returning 0. Details:", downloadError);
+    } catch (downloadError: any) {
+        console.error("Admin Dashboard: Error fetching total downloads count. Returning 0. Details:", downloadError.message);
         // totalDownloads remains 0
     }
 
@@ -68,23 +68,25 @@ export const getDashboardStats = async (): Promise<{
       const ordersSnapshot = await getDocs(collection(db, ORDERS_COLLECTION));
       totalOrders = ordersSnapshot.size;
       ordersSnapshot.forEach(doc => {
-        const sales = doc.data().totalAmountUSD;
+        const orderData = doc.data();
+        const sales = orderData.totalAmountUSD; // Ensure this field name matches what's saved
         if (typeof sales === 'number') {
             totalSalesAmount += sales;
         } else {
-            console.warn(`Order ${doc.id} has non-numeric totalAmountUSD: ${sales}`);
+            console.warn(`Order ${doc.id} has non-numeric or missing totalAmountUSD: ${sales}. Data:`, orderData);
         }
       });
-    } catch (orderError) {
-        console.error("Admin Dashboard: Error fetching orders for sales overview. Returning 0 for sales/orders. Details:", orderError);
+    } catch (orderError: any) {
+        console.error("Admin Dashboard: Error fetching orders for sales overview. Returning 0 for sales/orders. Details:", orderError.message);
         // totalOrders and totalSalesAmount remain 0
     }
     
 
     return { newUsersToday, totalDownloads, totalSalesAmount, totalOrders };
-  } catch (error) {
-    console.error("Admin Dashboard: General error fetching dashboard stats from Firestore. Details:", error);
+  } catch (error: any) {
+    console.error("Admin Dashboard: General error fetching dashboard stats from Firestore. Details:", error.message);
     // Return zero stats on error to prevent dashboard from breaking
     return { newUsersToday: 0, totalDownloads: 0, totalSalesAmount: 0, totalOrders: 0 };
   }
 };
+

@@ -12,11 +12,12 @@ import { Loader2 } from 'lucide-react';
 import { countBooksInDb } from '@/lib/book-service-firebase';
 import { countUsersInDb } from '@/lib/user-service-firebase'; 
 import { handleSeedDatabase } from '@/lib/actions/bookActions';
-import { 
-  handleSeedUserCarts, 
-  handleSeedBookDownloads, 
-  handleSeedOrders 
-} from '@/lib/actions/trackingActions';
+// Tracking seed actions removed
+// import { 
+//   handleSeedUserCarts, 
+//   handleSeedBookDownloads, 
+//   handleSeedOrders 
+// } from '@/lib/actions/trackingActions';
 import { getDashboardStats } from '@/lib/stats-service-firebase';
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
 import {
@@ -44,9 +45,9 @@ type FetchDashboardDataFunction = () => Promise<{
 
 interface LoadingStates {
   seedingBooks: boolean;
-  seedingCarts: boolean;
-  seedingDownloads: boolean;
-  seedingOrders: boolean;
+  // seedingCarts: boolean; // Removed
+  // seedingDownloads: boolean; // Removed
+  // seedingOrders: boolean; // Removed
   reloadingStats: boolean;
 }
 
@@ -54,9 +55,9 @@ export default function AdminDashboardPage() {
   const { toast } = useToast();
   const [loadingStates, setLoadingStates] = useState<LoadingStates>({
     seedingBooks: false,
-    seedingCarts: false,
-    seedingDownloads: false,
-    seedingOrders: false,
+    // seedingCarts: false, // Removed
+    // seedingDownloads: false, // Removed
+    // seedingOrders: false, // Removed
     reloadingStats: false,
   });
 
@@ -86,7 +87,7 @@ export default function AdminDashboardPage() {
       const [books, users, statsData] = await Promise.all([
         countBooksInDb(),
         countUsersInDb(),
-        getDashboardStats()
+        getDashboardStats() // This now includes downloads and sales
       ]);
       return {
         bookCount: books, userCount: users, newUsersToday: statsData.newUsersToday,
@@ -149,7 +150,7 @@ export default function AdminDashboardPage() {
     const result = await action();
     if (result.success) {
       toast({ title: successTitle, description: result.message });
-      await handleReloadStats(); // Refresh all stats after any successful seed
+      await handleReloadStats(); 
     } else {
       toast({ title: errorTitle, description: result.message, variant: 'destructive' });
     }
@@ -157,9 +158,7 @@ export default function AdminDashboardPage() {
   };
 
   const handleSeedBooks = createSeedHandler(handleSeedDatabase, 'seedingBooks', 'Books Seeded!', 'Error Seeding Books');
-  const handleSeedCartsAction = createSeedHandler(handleSeedUserCarts, 'seedingCarts', 'User Carts Seeded!', 'Error Seeding Carts');
-  const handleSeedDownloadsAction = createSeedHandler(handleSeedBookDownloads, 'seedingDownloads', 'Download History Seeded!', 'Error Seeding Downloads');
-  const handleSeedOrdersAction = createSeedHandler(handleSeedOrders, 'seedingOrders', 'Order History Seeded!', 'Error Seeding Orders');
+  // Removed handlers for seeding carts, downloads, orders
 
   const salesAmountDisplay = typeof dashboardData.totalSalesAmount === 'number' 
     ? dashboardData.totalSalesAmount.toFixed(2) 
@@ -169,8 +168,8 @@ export default function AdminDashboardPage() {
     { title: 'Total Books in Catalog', value: firebaseConfigured ? dashboardData.bookCount.toString() : 'N/A', icon: BookCopy, href: '/admin/books', description: 'Manage current book catalog' },
     { title: 'Total Registered Users', value: firebaseConfigured ? dashboardData.userCount.toString() : 'N/A', icon: Users, href: '/admin/users', description: 'View registered users' },
     { title: 'New Users (Today)', value: firebaseConfigured ? dashboardData.newUsersToday.toString() : 'N/A', icon: UserPlus, description: 'Users signed up today' },
-    { title: 'Total Downloads', value: firebaseConfigured ? dashboardData.totalDownloads.toString() : 'N/A', icon: DownloadCloud, description: 'Total book PDF downloads recorded' },
-    { title: 'Sales Overview', value: firebaseConfigured ? `$${salesAmountDisplay} (${dashboardData.totalOrders} orders)` : 'N/A', icon: BarChart3, description: 'Mock sales data from orders' },
+    { title: 'Total Downloads', value: firebaseConfigured ? dashboardData.totalDownloads.toString() : 'N/A', icon: DownloadCloud, href: '/admin/downloads', description: 'Total book PDF downloads' },
+    { title: 'Sales Overview', value: firebaseConfigured ? `$${salesAmountDisplay} (${dashboardData.totalOrders} orders)` : 'N/A', icon: BarChart3, href: '/admin/orders', description: 'Mock sales data from orders' },
   ];
 
   if (isInitialLoading && firebaseConfigured) {
@@ -220,13 +219,10 @@ export default function AdminDashboardPage() {
                 <CardContent>
                   <div className="text-2xl font-bold">{stat.value}</div>
                   {stat.description && <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>}
-                  {stat.href && stat.value !== 'N/A' && firebaseConfigured && stat.href !== '#' && (
+                  {stat.href && stat.value !== 'N/A' && firebaseConfigured && (
                     <Button variant="link" asChild className="px-0 pt-2">
                       <Link href={stat.href}>View Details</Link>
                     </Button>
-                  )}
-                   {stat.href === '#' && stat.value !== 'N/A' && (
-                    <p className="text-xs text-primary mt-2">Feature coming soon.</p>
                   )}
                 </CardContent>
               </Card>
@@ -238,7 +234,7 @@ export default function AdminDashboardPage() {
                   <CardTitle className="flex items-center">
                       <Database className="mr-2 h-5 w-5"/> Database Actions
                   </CardTitle>
-                  <CardDescription>Seed the database with mock data. Users are created via signup. Tracking data can also be seeded.</CardDescription>
+                  <CardDescription>Seed the initial book catalog. Other data like users, orders, and downloads are generated organically.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
                  <AlertDialog>
@@ -263,82 +259,14 @@ export default function AdminDashboardPage() {
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
-
-                <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="outline" disabled={loadingStates.seedingCarts || !firebaseConfigured}>
-                            {loadingStates.seedingCarts ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShoppingCart className="mr-2 h-4 w-4" />}
-                            Seed User Carts
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                        <AlertDialogTitle>Seed User Carts?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will add mock cart items from `src/data/mock-tracking-data.ts` to users found by email.
-                        </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                        <AlertDialogCancel disabled={loadingStates.seedingCarts}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleSeedCartsAction} disabled={loadingStates.seedingCarts} className="bg-blue-500 hover:bg-blue-600">
-                            {loadingStates.seedingCarts ? 'Seeding...' : 'Yes, Seed Carts'}
-                        </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-
-                 <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="outline" disabled={loadingStates.seedingDownloads || !firebaseConfigured}>
-                            {loadingStates.seedingDownloads ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <History className="mr-2 h-4 w-4" />}
-                            Seed Download History
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                        <AlertDialogTitle>Seed Download History?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will add mock download records from `src/data/mock-tracking-data.ts`.
-                        </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                        <AlertDialogCancel disabled={loadingStates.seedingDownloads}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleSeedDownloadsAction} disabled={loadingStates.seedingDownloads} className="bg-green-500 hover:bg-green-600">
-                            {loadingStates.seedingDownloads ? 'Seeding...' : 'Yes, Seed Downloads'}
-                        </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-
-                <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="outline" disabled={loadingStates.seedingOrders || !firebaseConfigured}>
-                            {loadingStates.seedingOrders ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PackageOpen className="mr-2 h-4 w-4" />}
-                            Seed Order History
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                        <AlertDialogTitle>Seed Order History?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                           This will add mock order records from `src/data/mock-tracking-data.ts`.
-                        </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                        <AlertDialogCancel disabled={loadingStates.seedingOrders}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleSeedOrdersAction} disabled={loadingStates.seedingOrders} className="bg-purple-500 hover:bg-purple-600">
-                            {loadingStates.seedingOrders ? 'Seeding...' : 'Yes, Seed Orders'}
-                        </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
+                {/* Removed buttons for seeding carts, downloads, orders */}
               </CardContent>
           </Card>
 
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Common administrative tasks for the book catalog.</CardDescription>
+              <CardDescription>Common administrative tasks for the book catalog and users.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
               <Button asChild disabled={!firebaseConfigured}>
@@ -350,6 +278,12 @@ export default function AdminDashboardPage() {
               <Button variant="outline" asChild disabled={!firebaseConfigured}>
                 <Link href="/admin/users">Manage Users</Link>
               </Button>
+               <Button variant="outline" asChild disabled={!firebaseConfigured}>
+                <Link href="/admin/orders">View Orders</Link>
+              </Button>
+               <Button variant="outline" asChild disabled={!firebaseConfigured}>
+                <Link href="/admin/downloads">View Downloads</Link>
+              </Button>
             </CardContent>
           </Card>
         </>
@@ -359,15 +293,14 @@ export default function AdminDashboardPage() {
         <p className="font-bold flex items-center"><Info className="mr-2 h-5 w-5" />Authentication & Tracking Note:</p>
         <p>- Authentication is handled by Firebase Authentication (Email/Password).</p>
         <p>- Admin panel access requires a user to be logged in and have their 'role' field in Firestore set to 'admin'.</p>
-        <p>- User-specific carts are stored in Firestore under each user's profile.</p>
-        <p>- Download and (mock) sales tracking are active. Seed corresponding data using the buttons above.</p>
+        <p>- User-specific carts, downloads, and orders are stored in Firestore.</p>
       </div>
       
        <div className="mt-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
         <p className="font-bold flex items-center"><AlertTriangle className="mr-2 h-5 w-5" />Important: Data Persistence Note</p>
         <p>- <strong className="text-green-700">PDF & Cover Image Files:</strong> Uploaded files are persisted in Firebase Storage.</p>
         <p>- <strong className="text-green-700">Book, User, Cart, Order, Download Metadata:</strong> Information is managed in Firebase Firestore and will persist.</p>
-        <p className="mt-2">- The "Seed Database" actions populate their respective collections. Users are created via signup. Tracking data can be seeded via the new buttons.</p>
+        <p className="mt-2">- The "Seed Book Catalog" action populates the 'books' collection. Users are created via signup. Orders and downloads are tracked organically.</p>
       </div>
     </div>
   );

@@ -7,25 +7,31 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { CheckCircle, Download, ShoppingBag, Loader2, AlertTriangle } from 'lucide-react';
-import type { Book } from '@/data/books';
+// Removed direct Book type import, will use a simpler PurchasedItem interface
 import { useCart } from '@/contexts/CartContext';
 import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData';
-import { useAuth } from '@/contexts/AuthContext'; // Added
-import { handleRecordDownload } from '@/lib/actions/trackingActions'; // Added
-import { useToast } from '@/hooks/use-toast'; // Added
+import { useAuth } from '@/contexts/AuthContext';
+import { handleRecordDownload } from '@/lib/actions/trackingActions';
+import { useToast } from '@/hooks/use-toast';
 
-interface PurchasedItem extends Book {
-  // quantity is implicitly 1 for PDFs
+interface PurchasedItem {
+  id: string;
+  title: string;
+  author: string;
+  price: number;
+  coverImageUrl: string;
+  pdfUrl: string;
+  dataAiHint?: string;
 }
 
 export default function OrderSummaryPage() {
   const [purchasedItems, setPurchasedItems] = useState<PurchasedItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { clearCart } = useCart();
+  const { clearCart } = useCart(); // Used for silent cart clear on mount if needed
   const [regionForFormatting, setRegionForFormatting] = useState<Region>(defaultRegion);
-  const { currentUser } = useAuth(); // Added
-  const { toast } = useToast(); // Added
+  const { currentUser, isLoading: authIsLoading } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
     const itemsJson = sessionStorage.getItem('lastPurchasedItems');
@@ -43,12 +49,17 @@ export default function OrderSummaryPage() {
         const items = JSON.parse(itemsJson) as PurchasedItem[];
         if (Array.isArray(items) && items.length > 0) {
           setPurchasedItems(items);
+          // Cart should have been cleared by CartPage after successful checkout.
+          // If a user lands here directly without going through cart checkout,
+          // this ensures any lingering local cart is also cleared to avoid confusion
+          // if they were using local storage before Firestore cart.
           clearCart(true); 
         } else if (items.length === 0) {
           setError("No items were in your cart at checkout.");
         } else {
           setError("Invalid order data found.");
         }
+        // Clear session storage after use
         sessionStorage.removeItem('lastPurchasedItems');
         sessionStorage.removeItem('lastPurchasedRegionCode');
       } catch (e) {
@@ -59,7 +70,7 @@ export default function OrderSummaryPage() {
       }
     }
     setIsLoading(false);
-  }, [clearCart]);
+  }, [clearCart]); // clearCart is stable
 
   const formatPriceInOrderCurrency = (usdPrice: number): string => {
     const convertedPrice = usdPrice * regionForFormatting.conversionRateToUSD;
@@ -85,22 +96,30 @@ export default function OrderSummaryPage() {
       });
       return;
     }
-    const result = await handleRecordDownload(bookId, currentUser.uid);
-    if (result.success) {
-      toast({
-        title: "Download Recorded",
-        description: `Your download of "${bookTitle}" has been logged.`,
-      });
-    } else {
-      toast({
-        title: "Download Logging Failed",
-        description: result.message || `Could not log download for "${bookTitle}".`,
-        variant: "destructive",
-      });
+    try {
+        const result = await handleRecordDownload(bookId, currentUser.uid);
+        if (result.success) {
+          toast({
+            title: "Download Recorded",
+            description: `Your download of "${bookTitle}" has been logged.`,
+          });
+        } else {
+          toast({
+            title: "Download Logging Failed",
+            description: result.message || `Could not log download for "${bookTitle}".`,
+            variant: "destructive",
+          });
+        }
+    } catch (e: any) {
+        toast({
+            title: "Download Logging Error",
+            description: e.message || "An unexpected error occurred while logging the download.",
+            variant: "destructive",
+        });
     }
   };
 
-  if (isLoading) {
+  if (isLoading || authIsLoading) {
     return (
       <div className="flex flex-col items-center justify-center text-center py-20 min-h-[60vh]">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -175,7 +194,15 @@ export default function OrderSummaryPage() {
                 asChild 
                 size="sm" 
                 className="w-full sm:w-auto mt-2 sm:mt-0"
-                onClick={() => onDownloadClick(book.id, book.title)}
+                onClick={async (e) => {
+                    e.preventDefault(); // Prevent default link navigation initially
+                    await onDownloadClick(book.id, book.title);
+                    // After attempting to record, navigate to the PDF URL
+                    // This ensures the record attempt happens before download starts.
+                    // Note: If PDF opens in same tab, toast might be missed.
+                    // A more robust way might be to open PDF in new tab or delay navigation.
+                    window.location.href = book.pdfUrl; 
+                }}
               >
                 <a href={book.pdfUrl} download={`${book.title.replace(/\s+/g, '_')}.pdf`}>
                   <Download className="mr-2 h-4 w-4" />
