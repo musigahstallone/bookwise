@@ -6,12 +6,13 @@ import {
   getDocs,
   doc,
   getDoc,
-  setDoc, // Using setDoc to specify document ID for users
+  setDoc, 
   query,
   where,
   writeBatch,
   Timestamp,
   getCountFromServer,
+  addDoc, // Changed from setDoc for addUserToDb to auto-generate ID
 } from 'firebase/firestore';
 
 const USERS_COLLECTION = 'users';
@@ -26,13 +27,12 @@ export const seedUsersToFirestore = async (usersToSeed: User[]): Promise<{count:
 
   for (const user of usersToSeed) {
     try {
-      const userDocRef = doc(db, USERS_COLLECTION, user.id); // Use predefined ID
-      // Convert Date to Firestore Timestamp if createdAt exists
+      const userDocRef = doc(db, USERS_COLLECTION, user.id); 
       const userData = { ...user };
       if (userData.createdAt && userData.createdAt instanceof Date) {
         (userData as any).createdAt = Timestamp.fromDate(userData.createdAt);
       } else if (!userData.createdAt) {
-        (userData as any).createdAt = Timestamp.now(); // Default to now if not provided
+        (userData as any).createdAt = Timestamp.now(); 
       }
       
       batch.set(userDocRef, userData);
@@ -80,7 +80,7 @@ export const getUserByEmailFromDb = async (email: string): Promise<User | null> 
     if (!querySnapshot.empty) {
       const userDoc = querySnapshot.docs[0];
       const userData = userDoc.data();
-      // Convert Firestore Timestamp back to Date for client
+      
       if (userData.createdAt && userData.createdAt instanceof Timestamp) {
         userData.createdAt = userData.createdAt.toDate();
       }
@@ -112,4 +112,23 @@ export const getAllUsersFromDb = async (): Promise<User[]> => {
     console.error("Error fetching all users from Firestore:", error);
     return [];
   }
+};
+
+export const addUserToDb = async (userData: { name: string; email: string; role?: 'user' | 'admin' }): Promise<User> => {
+  if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+    throw new Error("Firebase Project ID not configured.");
+  }
+  const newUserRef = await addDoc(collection(db, USERS_COLLECTION), {
+    name: userData.name,
+    email: userData.email.toLowerCase(),
+    role: userData.role || 'user', // Default role to 'user'
+    createdAt: Timestamp.now(),
+  });
+  return {
+    id: newUserRef.id,
+    name: userData.name,
+    email: userData.email.toLowerCase(),
+    role: userData.role || 'user',
+    createdAt: new Date() // Return a Date object for consistency
+  };
 };

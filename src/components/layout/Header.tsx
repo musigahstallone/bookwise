@@ -2,10 +2,10 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpen, Sparkles, Menu, X, ShoppingCart, Globe, LogIn, LogOut, UserCircle, Loader2 } from 'lucide-react';
+import { BookOpen, Sparkles, Menu, X, ShoppingCart, Globe, LogIn, LogOut, UserCircle, Loader2, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
-import { useState, FormEvent } from 'react';
+import { useState } from 'react';
 import { useCart } from '@/contexts/CartContext';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -18,13 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useRegion } from '@/contexts/RegionContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+// Removed Input and Popover as login is now a separate page
 
 
 const navLinks = [
@@ -35,14 +29,10 @@ const navLinks = [
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [loginEmail, setLoginEmail] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-
+  
   const { getItemCount } = useCart();
   const { selectedRegion, availableRegions, setSelectedRegionByCode } = useRegion();
-  const { currentUser, isLoading: authLoading, login, logout } = useAuth();
-  const { toast } = useToast();
+  const { currentUser, isLoading: authLoading, logout } = useAuth();
   const itemCount = getItemCount();
 
   const headerClasses = cn(
@@ -56,24 +46,6 @@ const Header = () => {
   const iconButtonClasses = cn(
     "text-foreground hover:text-primary"
   );
-
-  const handleLoginSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!loginEmail) {
-        toast({ title: "Login Error", description: "Please enter an email.", variant: "destructive"});
-        return;
-    }
-    setIsLoggingIn(true);
-    const success = await login(loginEmail);
-    if (success) {
-      toast({ title: "Login Successful", description: `Welcome back, ${loginEmail}!` });
-      setIsPopoverOpen(false); // Close popover on successful login
-      setLoginEmail(''); // Clear input
-    } else {
-      toast({ title: "Login Failed", description: "Email not recognized or error occurred.", variant: "destructive" });
-    }
-    setIsLoggingIn(false);
-  };
 
   const renderAuthSection = (isMobile = false) => {
     if (authLoading) {
@@ -95,34 +67,20 @@ const Header = () => {
       );
     }
 
+    // Login and Signup buttons
     return (
-      <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-        <PopoverTrigger asChild>
-          <Button variant={isMobile ? "outline" : "ghost"} size={isMobile ? "default" : "sm"} className={cn(isMobile && "w-full justify-start")}>
+      <div className={cn("flex", isMobile ? "flex-col space-y-2 items-start w-full" : "space-x-2")}>
+        <Button variant={isMobile ? "outline" : "ghost"} size={isMobile ? "default" : "sm"} asChild className={cn(isMobile && "w-full justify-start")}>
+          <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
             <LogIn className="mr-2 h-4 w-4" /> Login
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-72 p-4">
-          <form onSubmit={handleLoginSubmit} className="space-y-3">
-            <h4 className="font-medium leading-none text-sm">Mock Login</h4>
-            <p className="text-xs text-muted-foreground">
-              Enter an email to simulate login. <br/>
-              Admin: <code>odhiambostallone73@gmail.com</code><br/>
-              User: <code>musigahstallone@gmail.com</code>
-            </p>
-            <Input
-              type="email"
-              placeholder="Enter your email"
-              value={loginEmail}
-              onChange={(e) => setLoginEmail(e.target.value)}
-              disabled={isLoggingIn}
-            />
-            <Button type="submit" className="w-full" disabled={isLoggingIn}>
-              {isLoggingIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Login"}
-            </Button>
-          </form>
-        </PopoverContent>
-      </Popover>
+          </Link>
+        </Button>
+        <Button variant={isMobile ? "default" : "outline"} size={isMobile ? "default" : "sm"} asChild className={cn(isMobile && "w-full justify-start")}>
+          <Link href="/signup" onClick={() => setIsMobileMenuOpen(false)}>
+            <UserPlus className="mr-2 h-4 w-4" /> Sign Up
+          </Link>
+        </Button>
+      </div>
     );
   };
 
