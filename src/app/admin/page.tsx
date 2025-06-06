@@ -1,20 +1,22 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BookCopy, Users, BarChart3 } from 'lucide-react';
+import { BookCopy, Users, BarChart3, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { getAllBooksAdmin } from '@/lib/book-service'; // To get book count
 
 export default function AdminDashboardPage() {
-  // In a real app, these would come from a data source
+  const bookCount = getAllBooksAdmin().length;
+
   const stats = [
-    { title: 'Total Books', value: '20+', icon: BookCopy, href: '/admin/books' },
-    { title: 'Total Users', value: 'N/A', icon: Users, description: 'User accounts not yet implemented' },
-    { title: 'Sales Overview', value: 'N/A', icon: BarChart3, description: 'Sales tracking not yet implemented' },
+    { title: 'Total Books', value: bookCount.toString(), icon: BookCopy, href: '/admin/books', description: 'Manage book catalog' },
+    { title: 'Total Users', value: 'N/A', icon: Users, description: 'Firebase Auth integration needed' },
+    { title: 'Sales Overview', value: 'N/A', icon: BarChart3, description: 'Firebase Firestore/Orders integration needed' },
   ];
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-3xl font-headline font-bold text-primary">Admin Dashboard</h1>
       </div>
 
@@ -28,7 +30,7 @@ export default function AdminDashboardPage() {
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
               {stat.description && <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>}
-              {stat.href && (
+              {stat.href && stat.value !== 'N/A' && (
                 <Button variant="link" asChild className="px-0 pt-2">
                   <Link href={stat.href}>View Details</Link>
                 </Button>
@@ -50,11 +52,18 @@ export default function AdminDashboardPage() {
           <Button variant="outline" asChild>
             <Link href="/admin/books">Manage Books</Link>
           </Button>
+          {/* Future quick actions can be added here */}
         </CardContent>
       </Card>
+
+      <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-700 rounded-md">
+        <p className="font-bold flex items-center"><Users className="mr-2 h-5 w-5" />User & Sales Data Note:</p>
+        <p>Features like Total Users and Sales Overview require Firebase Authentication and Firestore (for order data) to be fully implemented. They are currently placeholders.</p>
+      </div>
+      
        <div className="mt-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
-        <p className="font-bold">Developer Note:</p>
-        <p>Book data modifications made in this admin panel are for the current session only and will not persist across server restarts or application rebuilds due to the lack of a backend database in this prototype.</p>
+        <p className="font-bold flex items-center"><AlertTriangle className="mr-2 h-5 w-5" />Developer Note (Data Persistence):</p>
+        <p>Book metadata modifications (add, edit, delete) made in this admin panel are for the current session only using local data structures. While PDF uploads persist in Firebase Storage, the book information itself (title, author, PDF URL link) will reset if the application server restarts or rebuilds. For full data persistence, integrate Firebase Firestore for book metadata.</p>
       </div>
     </div>
   );

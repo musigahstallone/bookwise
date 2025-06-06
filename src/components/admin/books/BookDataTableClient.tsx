@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Table,
   TableBody,
@@ -29,12 +29,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import Image from 'next/image';
+import PaginationControls from '@/components/books/PaginationControls'; // Reusing from shop
+
+const BOOKS_PER_PAGE = 10; // Admin can see more per page
 
 export default function BookDataTableClient() {
-  const [books, setBooks] = useState<Book[]>([]);
+  const [allBooks, setAllBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [bookToDelete, setBookToDelete] = useState<Book | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -44,8 +48,7 @@ export default function BookDataTableClient() {
 
   const fetchBooks = () => {
     setIsLoading(true);
-    // Simulate API call delay if needed, but direct service call is fine for now
-    setBooks(getAllBooksAdmin());
+    setAllBooks(getAllBooksAdmin());
     setIsLoading(false);
   };
 
@@ -59,8 +62,14 @@ export default function BookDataTableClient() {
     try {
       deleteBookAdmin(bookToDelete.id);
       toast({ title: 'Success', description: `"${bookToDelete.title}" deleted successfully.` });
-      setBooks(prevBooks => prevBooks.filter(b => b.id !== bookToDelete!.id)); // Update local state immediately
-      // router.refresh(); // This can help re-sync if there are server-side aspects
+      setAllBooks(prevBooks => prevBooks.filter(b => b.id !== bookToDelete!.id)); 
+      // Adjust current page if the last item on a page was deleted
+      const newTotalPages = Math.ceil((allBooks.length - 1) / BOOKS_PER_PAGE);
+      if (currentPage > newTotalPages && newTotalPages > 0) {
+        setCurrentPage(newTotalPages);
+      } else if (newTotalPages === 0) {
+        setCurrentPage(1);
+      }
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to delete book.', variant: 'destructive' });
     } finally {
@@ -70,8 +79,21 @@ export default function BookDataTableClient() {
   };
 
   const sortedBooks = useMemo(() => {
-    return [...books].sort((a,b) => a.title.localeCompare(b.title));
-  }, [books]);
+    return [...allBooks].sort((a,b) => a.title.localeCompare(b.title));
+  }, [allBooks]);
+
+  const totalPages = Math.ceil(sortedBooks.length / BOOKS_PER_PAGE);
+
+  const paginatedBooks = useMemo(() => {
+    const startIndex = (currentPage - 1) * BOOKS_PER_PAGE;
+    const endIndex = startIndex + BOOKS_PER_PAGE;
+    return sortedBooks.slice(startIndex, endIndex);
+  }, [sortedBooks, currentPage]);
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
 
   if (isLoading) {
@@ -84,28 +106,39 @@ export default function BookDataTableClient() {
 
   return (
     <>
-      <div className="rounded-md border shadow-sm">
+      <div className="rounded-md border shadow-sm overflow-x-auto"> {/* Added overflow-x-auto for mobile table */}
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[80px]">Cover</TableHead>
+              <TableHead className="w-[60px] sm:w-[80px]">Cover</TableHead>
               <TableHead>Title</TableHead>
-              <TableHead>Author</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead className="text-right">Price</TableHead>
-              <TableHead className="text-center w-[100px]">Actions</TableHead>
+              <TableHead className="hidden md:table-cell">Author</TableHead>
+              <TableHead className="hidden lg:table-cell">Category</TableHead>
+              <TableHead className="text-right hidden sm:table-cell">Price</TableHead>
+              <TableHead className="text-center w-[80px] sm:w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedBooks.map((book) => (
+            {paginatedBooks.map((book) => (
               <TableRow key={book.id}>
                 <TableCell>
-                   <Image src={book.coverImageUrl || 'https://placehold.co/50x50.png'} alt={book.title} width={40} height={40} className="rounded object-cover aspect-square" data-ai-hint={book.dataAiHint || 'book cover small'}/>
+                   <Image 
+                     src={book.coverImageUrl || 'https://placehold.co/50x50.png'} 
+                     alt={book.title} 
+                     width={40} 
+                     height={40} 
+                     className="rounded object-cover aspect-square" 
+                     data-ai-hint={book.dataAiHint || 'book cover small'}
+                   />
                 </TableCell>
-                <TableCell className="font-medium">{book.title}</TableCell>
-                <TableCell>{book.author}</TableCell>
-                <TableCell>{book.category}</TableCell>
-                <TableCell className="text-right">${book.price.toFixed(2)}</TableCell>
+                <TableCell className="font-medium">
+                  {book.title}
+                  <div className="text-xs text-muted-foreground md:hidden">{book.author}</div>
+                  <div className="text-xs text-muted-foreground sm:hidden">${book.price.toFixed(2)}</div>
+                </TableCell>
+                <TableCell className="hidden md:table-cell">{book.author}</TableCell>
+                <TableCell className="hidden lg:table-cell">{book.category}</TableCell>
+                <TableCell className="text-right hidden sm:table-cell">${book.price.toFixed(2)}</TableCell>
                 <TableCell className="text-center">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -131,6 +164,13 @@ export default function BookDataTableClient() {
           </TableBody>
         </Table>
       </div>
+      {totalPages > 1 && (
+        <PaginationControls
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+        />
+      )}
 
       {bookToDelete && (
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

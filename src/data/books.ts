@@ -8,11 +8,14 @@ export interface Book {
   longDescription?: string;
   price: number;
   coverImageUrl: string;
-  pdfUrl: string;
+  pdfUrl: string; // Can now be a Firebase Storage URL
   dataAiHint?: string;
-  publishedYear: number; // Added publishedYear
+  publishedYear: number;
 }
 
+// This initial list serves as a seed if no persistent storage is used.
+// For a Firebase-backed app, this would typically be fetched from Firestore.
+// For this prototype, admin modifications update an in-memory copy.
 export const books: Book[] = [
   {
     id: '1',
@@ -272,15 +275,19 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x300.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'selfhelp attitude',
-    publishedYear: 2024, // Example of a new book
+    publishedYear: 2024, 
   },
 ];
 
 export const getBookById = (id: string): Book | undefined => {
+  // In a real app with Firebase, this would fetch from Firestore.
+  // For the prototype, it uses the mutableBooks from book-service if available,
+  // otherwise falls back to the initial books.
+  // This line will be effectively overridden by getBookByIdAdmin if called from admin context.
   return books.find(book => book.id === id);
 };
 
 export const getBooksByAuthor = (authorName: string): Book[] => {
+  // Similar to getBookById, this would query Firestore in a real app.
   return books.filter(book => book.author.toLowerCase() === authorName.toLowerCase());
 };
-    
