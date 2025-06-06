@@ -1,7 +1,9 @@
+
 export interface Book {
   id: string;
   title: string;
   author: string;
+  category: string; // Added category
   description: string;
   longDescription?: string;
   price: number;
@@ -15,6 +17,7 @@ export const books: Book[] = [
     id: '1',
     title: 'The Midnight Library',
     author: 'Matt Haig',
+    category: 'Fiction',
     description: 'A novel about choices, regrets, and the infinite possibilities of life.',
     longDescription: 'Between life and death there is a library... Would you have done anything different, if you had the chance to undo your regrets?',
     price: 15.99,
@@ -26,6 +29,7 @@ export const books: Book[] = [
     id: '2',
     title: 'Project Hail Mary',
     author: 'Andy Weir',
+    category: 'Science Fiction',
     description: 'An amnesiac astronaut wakes up on a solo mission to save humanity.',
     longDescription: 'Ryland Grace is the sole survivor... he doesn’t even remember his own name or the nature of his assignment.',
     price: 18.50,
@@ -37,6 +41,7 @@ export const books: Book[] = [
     id: '3',
     title: 'Klara and the Sun',
     author: 'Kazuo Ishiguro',
+    category: 'Science Fiction',
     description: 'A story about an "Artificial Friend" and her observations of human nature.',
     longDescription: 'Klara, an Artificial Friend... watches carefully the behavior of those who come in and those who pass on the street.',
     price: 16.75,
@@ -48,6 +53,7 @@ export const books: Book[] = [
     id: '4',
     title: 'The Vanishing Half',
     author: 'Brit Bennett',
+    category: 'Fiction',
     description: 'A multi-generational story about twin sisters who live very different lives.',
     longDescription: 'After running away at sixteen, the twin sisters live in two different worlds — one black, one passing for white.',
     price: 14.99,
@@ -59,6 +65,7 @@ export const books: Book[] = [
     id: '5',
     title: 'Atomic Habits',
     author: 'James Clear',
+    category: 'Self-Help',
     description: 'A proven way to build good habits and break bad ones.',
     longDescription: 'James Clear reveals practical strategies to help you make tiny changes that lead to remarkable results.',
     price: 20.00,
@@ -70,6 +77,7 @@ export const books: Book[] = [
     id: '6',
     title: 'Educated',
     author: 'Tara Westover',
+    category: 'Memoir',
     description: 'A memoir of a girl who, kept out of school, leaves her survivalist family and earns a PhD from Cambridge.',
     longDescription: 'Tara was 17 the first time she set foot in a classroom. Her story is one of fierce family loyalty and the grief that comes with severing the closest of ties.',
     price: 17.99,
@@ -81,6 +89,7 @@ export const books: Book[] = [
     id: '7',
     title: 'Where the Crawdads Sing',
     author: 'Delia Owens',
+    category: 'Mystery',
     description: 'A murder mystery and coming-of-age story set in the marshes of North Carolina.',
     longDescription: 'Kya Clark, the mysterious "Marsh Girl", is suspected when a handsome local is found dead.',
     price: 14.50,
@@ -92,6 +101,7 @@ export const books: Book[] = [
     id: '8',
     title: 'The Alchemist',
     author: 'Paulo Coelho',
+    category: 'Fiction',
     description: 'A philosophical book about following your dreams.',
     longDescription: 'Santiago, a shepherd boy, travels in search of treasure and discovers the treasure within himself.',
     price: 13.00,
@@ -103,6 +113,7 @@ export const books: Book[] = [
     id: '9',
     title: 'The Four Agreements',
     author: 'Don Miguel Ruiz',
+    category: 'Spirituality',
     description: 'A guide to personal freedom based on ancient Toltec wisdom.',
     longDescription: 'The book reveals the source of self-limiting beliefs that rob us of joy and create needless suffering.',
     price: 11.95,
@@ -114,6 +125,7 @@ export const books: Book[] = [
     id: '10',
     title: 'Becoming',
     author: 'Michelle Obama',
+    category: 'Memoir',
     description: 'The memoir of the former First Lady of the United States.',
     longDescription: 'Michelle Obama invites readers into her world, chronicling the experiences that shaped her.',
     price: 19.99,
@@ -125,6 +137,7 @@ export const books: Book[] = [
     id: '11',
     title: 'Sapiens',
     author: 'Yuval Noah Harari',
+    category: 'History',
     description: 'A brief history of humankind.',
     longDescription: 'Harari explores how Homo sapiens came to dominate the world and the consequences of our actions.',
     price: 21.00,
@@ -136,6 +149,7 @@ export const books: Book[] = [
     id: '12',
     title: 'The Power of Now',
     author: 'Eckhart Tolle',
+    category: 'Spirituality',
     description: 'A spiritual guide to living in the present moment.',
     longDescription: 'This book teaches how to stop the chatter of the mind and live more peacefully and intentionally.',
     price: 16.00,
@@ -147,6 +161,7 @@ export const books: Book[] = [
     id: '13',
     title: 'Dune',
     author: 'Frank Herbert',
+    category: 'Science Fiction',
     description: 'A science fiction epic set in a desert planet where spice is everything.',
     longDescription: 'Paul Atreides must navigate politics, prophecy, and power in a harsh universe.',
     price: 18.25,
@@ -158,6 +173,7 @@ export const books: Book[] = [
     id: '14',
     title: '1984',
     author: 'George Orwell',
+    category: 'Dystopian',
     description: 'A dystopian novel about surveillance and totalitarianism.',
     longDescription: 'Winston Smith rebels against a regime that controls truth itself.',
     price: 10.99,
@@ -169,6 +185,7 @@ export const books: Book[] = [
     id: '15',
     title: 'To Kill a Mockingbird',
     author: 'Harper Lee',
+    category: 'Classic',
     description: 'A classic tale of justice and racial prejudice in the American South.',
     longDescription: 'Atticus Finch defends a black man accused of a terrible crime in a deeply divided town.',
     price: 12.50,
@@ -180,6 +197,7 @@ export const books: Book[] = [
     id: '16',
     title: 'The Silent Patient',
     author: 'Alex Michaelides',
+    category: 'Thriller',
     description: 'A psychological thriller about a woman who stops speaking after a murder.',
     longDescription: 'Alicia Berenson shoots her husband and never speaks again. A psychotherapist is determined to uncover the truth.',
     price: 13.75,
@@ -191,6 +209,7 @@ export const books: Book[] = [
     id: '17',
     title: 'Can’t Hurt Me',
     author: 'David Goggins',
+    category: 'Memoir',
     description: 'The inspiring story of one man’s mental and physical transformation.',
     longDescription: 'From a broken childhood to Navy SEAL and endurance athlete, Goggins shares his approach to mastering the mind.',
     price: 17.95,
@@ -202,6 +221,7 @@ export const books: Book[] = [
     id: '18',
     title: 'Rich Dad Poor Dad',
     author: 'Robert T. Kiyosaki',
+    category: 'Finance',
     description: 'A financial education book that contrasts two fatherly influences.',
     longDescription: 'Learn how to make money work for you by understanding assets, liabilities, and financial independence.',
     price: 12.99,
@@ -213,6 +233,7 @@ export const books: Book[] = [
     id: '19',
     title: 'Think Like a Monk',
     author: 'Jay Shetty',
+    category: 'Spirituality',
     description: 'Train your mind for peace and purpose every day.',
     longDescription: 'Jay Shetty shares monk wisdom on how to overcome negativity, reduce stress, and live a life of service.',
     price: 16.40,
@@ -224,6 +245,7 @@ export const books: Book[] = [
     id: '20',
     title: 'The Subtle Art of Not Giving a F*ck',
     author: 'Mark Manson',
+    category: 'Self-Help',
     description: 'A brutally honest self-help guide.',
     longDescription: 'Manson shows that life’s struggles give it meaning and how embracing our limitations can lead to a better life.',
     price: 14.00,
@@ -236,3 +258,5 @@ export const books: Book[] = [
 export const getBookById = (id: string): Book | undefined => {
   return books.find(book => book.id === id);
 };
+
+    
