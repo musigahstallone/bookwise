@@ -42,8 +42,6 @@ export default function LoginPage() {
         description: 'Welcome back.',
       });
       // onAuthStateChanged in AuthContext will handle setting currentUser
-      // router.refresh() might be needed if header doesn't update due to caching
-      // or have AuthContext provide a manual refresh trigger for its internal state.
       const redirectUrl = searchParams.get('redirectUrl') || '/';
       router.push(redirectUrl); 
       // A small delay can sometimes help if there's a race condition with context update and redirect
@@ -51,13 +49,27 @@ export default function LoginPage() {
 
 
     } catch (firebaseError: any) {
-      let errorMessage = 'Login failed. Please check your credentials.';
-      if (firebaseError.code === 'auth/user-not-found' || firebaseError.code === 'auth/wrong-password' || firebaseError.code === 'auth/invalid-credential') {
-        errorMessage = 'Invalid email or password.';
-      } else if (firebaseError.code === 'auth/invalid-email') {
-        errorMessage = 'Please enter a valid email address.';
+      let errorMessage = 'An unexpected error occurred during login. Please try again.';
+      
+      switch (firebaseError.code) {
+        case 'auth/invalid-credential':
+        case 'auth/user-not-found': // Often grouped with invalid-credential by Firebase
+        case 'auth/wrong-password':
+          errorMessage = 'Invalid email or password. Please check your credentials or sign up if you are new.';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'The email address is not valid. Please enter a correct email format.';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'This user account has been disabled.';
+          break;
+        default:
+          // Keep the generic message for other unhandled Firebase errors
+          console.error("Unhandled Firebase login error:", firebaseError); 
+          break;
       }
-      console.error("Firebase login error:", firebaseError);
+      
+      console.error("Firebase login error details:", firebaseError); // Log the full error for debugging
       setError(errorMessage);
       toast({
         title: 'Login Failed',
