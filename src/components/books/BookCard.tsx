@@ -20,13 +20,13 @@ const BookCard: React.FC<BookCardProps> = ({ book }) => {
   const { addToCart } = useCart();
 
   const handleAddToCart = (e: React.MouseEvent) => {
-    e.preventDefault(); // Prevent link navigation if card is wrapped in Link
+    e.preventDefault(); 
     e.stopPropagation();
     addToCart(book);
   };
 
   return (
-    <Card className="flex flex-col overflow-hidden h-full shadow-lg hover:shadow-xl transition-shadow duration-300">
+    <Card className="flex flex-col overflow-hidden h-full shadow-lg hover:shadow-xl transition-shadow duration-300 group">
       <CardHeader className="p-0 relative">
         <Link href={`/books/${book.id}`} className="block aspect-[2/3] w-full relative">
           <Image
@@ -37,10 +37,19 @@ const BookCard: React.FC<BookCardProps> = ({ book }) => {
             data-ai-hint={book.dataAiHint || 'book cover'}
           />
           {isNew && (
-            <Badge variant="default" className="absolute top-2 right-2 bg-primary text-primary-foreground shadow-md">
+            <Badge variant="default" className="absolute top-2 left-2 bg-primary text-primary-foreground shadow-md z-10">
               NEW!
             </Badge>
           )}
+          <Button
+            variant="default"
+            size="icon"
+            onClick={handleAddToCart}
+            className="absolute top-2 right-2 z-10 h-9 w-9 p-2 rounded-full shadow-md opacity-80 group-hover:opacity-100 transition-opacity"
+            aria-label={`Add ${book.title} to cart`}
+          >
+            <ShoppingCart className="h-5 w-5" />
+          </Button>
         </Link>
       </CardHeader>
       <CardContent className="p-4 flex-grow">
@@ -54,15 +63,13 @@ const BookCard: React.FC<BookCardProps> = ({ book }) => {
       </CardContent>
       <CardFooter className="p-4 pt-0 flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
         <p className="text-lg font-bold text-primary order-1 sm:order-none">${book.price.toFixed(2)}</p>
-        <div className="flex space-x-2 order-2 sm:order-none w-full sm:w-auto justify-between sm:justify-end">
+        <div className="flex space-x-2 order-2 sm:order-none w-full sm:w-auto justify-center sm:justify-end">
           <Button asChild variant="outline" size="sm" className="flex-grow sm:flex-grow-0">
             <Link href={`/books/${book.id}`}>
               View <ArrowRight className="ml-1 h-4 w-4 hidden sm:inline" />
             </Link>
           </Button>
-          <Button variant="default" size="sm" onClick={handleAddToCart} className="flex-grow sm:flex-grow-0">
-            <ShoppingCart className="mr-1 h-4 w-4" /> Add
-          </Button>
+          {/* The full "Add to Cart" button is removed from here to be replaced by the icon button in the header */}
         </div>
       </CardFooter>
     </Card>
