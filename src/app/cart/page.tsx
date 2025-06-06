@@ -3,17 +3,16 @@
 
 import { useCart } from '@/contexts/CartContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Trash2, ShoppingBag, MinusCircle, PlusCircle, XCircle } from 'lucide-react';
+import { Trash2, ShoppingBag, XCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { Input } from '@/components/ui/input';
 
 export default function CartPage() {
-  const { cartItems, removeFromCart, updateQuantity, clearCart, getCartTotal, getItemCount } = useCart();
+  const { cartItems, removeFromCart, clearCart, getCartTotal, getItemCount } = useCart();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -37,14 +36,6 @@ export default function CartPage() {
     });
     clearCart();
     router.push(`/purchase-success/${firstBookId}`); // Navigate to a success page
-  };
-
-  const handleQuantityChange = (bookId: string, newQuantity: number) => {
-    if (newQuantity >= 1) {
-      updateQuantity(bookId, newQuantity);
-    } else if (newQuantity === 0) {
-      removeFromCart(bookId);
-    }
   };
 
   if (cartItems.length === 0) {
@@ -77,7 +68,7 @@ export default function CartPage() {
         <div className="lg:col-span-2 space-y-6">
           {cartItems.map((item) => (
             <Card key={item.id} className="flex flex-col sm:flex-row items-start sm:items-center p-4 shadow-md overflow-hidden">
-              <div className="w-24 h-36 sm:w-20 sm:h-30 relative flex-shrink-0 rounded overflow-hidden mr-0 sm:mr-6 mb-4 sm:mb-0">
+              <div className="w-24 h-24 sm:w-20 sm:h-20 relative flex-shrink-0 rounded overflow-hidden mr-0 sm:mr-6 mb-4 sm:mb-0 aspect-square">
                 <Image src={item.coverImageUrl} alt={item.title} layout="fill" objectFit="cover" data-ai-hint={item.dataAiHint || 'book cart item'} />
               </div>
               <div className="flex-grow">
@@ -86,23 +77,9 @@ export default function CartPage() {
                 </Link>
                 <p className="text-sm text-muted-foreground">By {item.author}</p>
                 <p className="text-md font-semibold text-foreground mt-1">${item.price.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Quantity: 1 (PDF Download)</p>
               </div>
               <div className="flex items-center space-x-3 mt-4 sm:mt-0 sm:ml-auto flex-shrink-0">
-                 <div className="flex items-center border rounded-md">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleQuantityChange(item.id, item.quantity - 1)} disabled={item.quantity <= 1}>
-                        <MinusCircle className="h-4 w-4" />
-                    </Button>
-                    <Input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value, 10) || 0)}
-                        className="h-8 w-12 text-center border-l border-r rounded-none focus-visible:ring-0"
-                        min="1"
-                    />
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleQuantityChange(item.id, item.quantity + 1)}>
-                        <PlusCircle className="h-4 w-4" />
-                    </Button>
-                 </div>
                 <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.id)} className="text-destructive hover:text-destructive">
                   <Trash2 className="h-5 w-5" />
                   <span className="sr-only">Remove item</span>
@@ -113,7 +90,7 @@ export default function CartPage() {
         </div>
 
         <div className="lg:col-span-1">
-          <Card className="shadow-lg sticky top-24"> {/* Added sticky positioning */}
+          <Card className="shadow-lg sticky top-24">
             <CardHeader>
               <CardTitle className="text-2xl font-headline">Order Summary</CardTitle>
             </CardHeader>
@@ -141,4 +118,3 @@ export default function CartPage() {
     </div>
   );
 }
-

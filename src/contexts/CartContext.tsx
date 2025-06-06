@@ -6,17 +6,16 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useToast } from '@/hooks/use-toast';
 
 interface CartItem extends Book {
-  quantity: number;
+  quantity: 1; // Quantity is always 1 for PDF downloads
 }
 
 interface CartContextType {
   cartItems: CartItem[];
   addToCart: (book: Book) => void;
   removeFromCart: (bookId: string) => void;
-  updateQuantity: (bookId: string, quantity: number) => void;
   clearCart: () => void;
   getCartTotal: () => number;
-  getItemCount: () => number;
+  getItemCount: () => number; // This will return the number of unique items
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -28,7 +27,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const storedCartItems = localStorage.getItem('bookwiseCart');
     if (storedCartItems) {
-      setCartItems(JSON.parse(storedCartItems));
+      // Ensure stored items also conform to quantity: 1
+      const parsedItems: CartItem[] = JSON.parse(storedCartItems);
+      setCartItems(parsedItems.map(item => ({ ...item, quantity: 1 })));
     }
   }, []);
 
@@ -42,11 +43,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       if (existingItem) {
         toast({
           title: `${book.title} is already in your cart.`,
-          description: 'You can adjust quantity on the cart page.',
+          description: 'You can purchase one copy per PDF book.',
         });
-        return prevItems.map((item) =>
-          item.id === book.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
+        return prevItems; // Do not add again or change quantity
       } else {
         toast({
           title: 'Added to Cart!',
@@ -71,17 +70,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  const updateQuantity = (bookId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(bookId);
-      return;
-    }
-    setCartItems((prevItems) =>
-      prevItems.map((item) =>
-        item.id === bookId ? { ...item, quantity } : item
-      )
-    );
-  };
+  // updateQuantity is removed as quantity is fixed at 1 for PDFs
 
   const clearCart = () => {
     setCartItems([]);
@@ -92,11 +81,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const getCartTotal = () => {
-    return cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+    // Since quantity is always 1, sum of prices
+    return cartItems.reduce((total, item) => total + item.price, 0);
   };
 
   const getItemCount = () => {
-    return cartItems.reduce((count, item) => count + item.quantity, 0);
+    // Returns the number of unique books in the cart
+    return cartItems.length;
   };
 
   return (
@@ -105,7 +96,6 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         cartItems,
         addToCart,
         removeFromCart,
-        updateQuantity,
         clearCart,
         getCartTotal,
         getItemCount,

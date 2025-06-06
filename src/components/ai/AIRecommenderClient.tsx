@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -119,7 +120,7 @@ export default function AIRecommenderClient({ bookCatalog, allBooks }: AIRecomme
                     {bookDetail && (
                       <div className="w-full sm:w-1/4 flex-shrink-0">
                         <Link href={`/books/${bookDetail.id}`}>
-                          <div className="aspect-[2/3] relative rounded overflow-hidden cursor-pointer">
+                          <div className="aspect-square relative rounded overflow-hidden cursor-pointer">
                             <Image
                               src={bookDetail.coverImageUrl}
                               alt={bookDetail.title}

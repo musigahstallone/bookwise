@@ -7,9 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
-import { notFound, useParams } from 'next/navigation'; // Import useParams
+import { notFound, useParams } from 'next/navigation';
 import { ShoppingCart, ArrowLeft } from 'lucide-react';
-// import BuyButtonClient from '@/components/books/BuyButtonClient'; // Kept for now, but cart is preferred
 import { useCart } from '@/contexts/CartContext';
 import { useEffect, useState } from 'react';
 
@@ -28,7 +27,6 @@ export default function BookDetailsPage() {
 
 
   if (book === undefined) {
-    // Still loading or params.id not available yet
     return (
       <div className="max-w-4xl mx-auto text-center py-10">
         <p>Loading book details...</p>
@@ -56,7 +54,7 @@ export default function BookDetailsPage() {
       <Card className="overflow-hidden shadow-xl">
         <div className="md:flex">
           <div className="md:w-1/3 p-4">
-            <div className="aspect-[2/3] relative rounded-lg overflow-hidden shadow-md">
+            <div className="aspect-square relative rounded-lg overflow-hidden shadow-md">
               <Image
                 src={book.coverImageUrl}
                 alt={book.title}
@@ -69,7 +67,12 @@ export default function BookDetailsPage() {
           <div className="md:w-2/3">
             <CardHeader className="p-6">
               <CardTitle className="text-4xl font-headline mb-2">{book.title}</CardTitle>
-              <CardDescription className="text-lg text-muted-foreground">By {book.author}</CardDescription>
+              <CardDescription className="text-lg text-muted-foreground">
+                By{' '}
+                <Link href={`/authors/${encodeURIComponent(book.author)}`} className="hover:underline text-primary/90">
+                  {book.author}
+                </Link>
+              </CardDescription>
             </CardHeader>
             <CardContent className="p-6 pt-0">
               <p className="text-2xl font-bold text-primary mb-4">${book.price.toFixed(2)}</p>
@@ -83,8 +86,6 @@ export default function BookDetailsPage() {
                   <ShoppingCart className="mr-2 h-5 w-5" />
                   Add to Cart
                 </Button>
-                {/* The BuyButtonClient can be kept for direct purchase or removed if cart is the only flow */}
-                {/* <BuyButtonClient bookId={book.id} bookTitle={book.title} /> */}
               </div>
             </CardContent>
           </div>

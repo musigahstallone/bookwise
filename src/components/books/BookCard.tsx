@@ -28,7 +28,7 @@ const BookCard: React.FC<BookCardProps> = ({ book }) => {
   return (
     <Card className="flex flex-col overflow-hidden h-full shadow-lg hover:shadow-xl transition-shadow duration-300 group">
       <CardHeader className="p-0 relative">
-        <Link href={`/books/${book.id}`} className="block aspect-[2/3] w-full relative">
+        <Link href={`/books/${book.id}`} className="block aspect-square w-full relative">
           <Image
             src={book.coverImageUrl}
             alt={book.title}
@@ -58,7 +58,12 @@ const BookCard: React.FC<BookCardProps> = ({ book }) => {
             {book.title}
           </Link>
         </CardTitle>
-        <CardDescription className="text-sm text-muted-foreground mb-2">By {book.author}</CardDescription>
+        <CardDescription className="text-sm text-muted-foreground mb-2">
+          By{' '}
+          <Link href={`/authors/${encodeURIComponent(book.author)}`} className="hover:underline text-primary/90">
+            {book.author}
+          </Link>
+        </CardDescription>
         <p className="text-sm line-clamp-3 mb-3">{book.description}</p>
       </CardContent>
       <CardFooter className="p-4 pt-0 flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
@@ -69,7 +74,6 @@ const BookCard: React.FC<BookCardProps> = ({ book }) => {
               View <ArrowRight className="ml-1 h-4 w-4 hidden sm:inline" />
             </Link>
           </Button>
-          {/* The full "Add to Cart" button is removed from here to be replaced by the icon button in the header */}
         </div>
       </CardFooter>
     </Card>
