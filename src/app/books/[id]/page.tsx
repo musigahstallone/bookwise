@@ -1,5 +1,5 @@
 
-'use client'; // Make this a client component to use AuthContext for conditional rendering
+'use client'; 
 
 import { useEffect, useState } from 'react';
 import { getBookByIdFromDb } from '@/lib/book-service-firebase';
@@ -9,27 +9,29 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
-import { notFound, useParams } from 'next/navigation'; // useParams for client components
-import { ShoppingCart, ArrowLeft, AlertTriangle, Loader2 } from 'lucide-react';
+import { notFound, useParams, useRouter } from 'next/navigation';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import AddToCartButton from '@/components/books/AddToCartButton';
 import PriceDisplay from '@/components/books/PriceDisplay';
-import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
+import { useAuth } from '@/contexts/AuthContext';
+import ErrorDisplay from '@/components/layout/ErrorDisplay'; // New Import
 
 export default function BookDetailsPage() {
-  const params = useParams(); // Use useParams for client components
+  const params = useParams(); 
+  const router = useRouter();
   const bookId = typeof params.id === 'string' ? params.id : '';
   
   const [book, setBook] = useState<Book | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  const { currentUser, isLoading: authIsLoading } = useAuth(); // Get currentUser from AuthContext
+  const { currentUser, isLoading: authIsLoading } = useAuth();
 
   useEffect(() => {
-    async function fetchBook() {
+    async function fetchBookData() {
       if (!bookId) {
         setIsLoading(false);
-        // Potentially call notFound() or set an error if bookId is invalid early
+        setFetchError("Invalid book ID provided.");
         return;
       }
       if (firebaseConfigured) {
@@ -37,18 +39,43 @@ export default function BookDetailsPage() {
           const fetchedBook = await getBookByIdFromDb(bookId);
           setBook(fetchedBook);
           if (!fetchedBook) {
-            // If Firebase is configured but book not found, it's a true 404 for this ID
-             setFetchError("Book not found."); // Or trigger notFound() after state update
+             setFetchError("Book not found."); 
           }
         } catch (error) {
           console.error(`Error fetching book ${bookId}:`, error);
-          setFetchError(error instanceof Error ? error.message : "An unknown error occurred.");
+          setFetchError(error instanceof Error ? error.message : "An unknown error occurred while fetching book details.");
         }
+      } else {
+        setFetchError("Firebase is not configured. Cannot load book details.");
       }
       setIsLoading(false);
     }
-    fetchBook();
+    fetchBookData();
   }, [bookId, firebaseConfigured]);
+
+  const handleRetry = () => {
+    setFetchError(null);
+    setIsLoading(true);
+    // Re-trigger useEffect by dependency change is complex here,
+    // so we'll just re-call the fetch function or reload.
+    // For simplicity, a reload or re-nav might be easiest if retry is complex
+    // router.refresh(); // If using Server Component or for re-fetching server data
+    // For client component, we'd call fetchBookData again:
+    async function fetchBookData() {
+      if (!bookId) { setIsLoading(false); setFetchError("Invalid book ID."); return; }
+      if (firebaseConfigured) {
+        try {
+          const fetchedBook = await getBookByIdFromDb(bookId);
+          setBook(fetchedBook);
+          if (!fetchedBook) { setFetchError("Book not found."); }
+        } catch (error) {
+          setFetchError(error instanceof Error ? error.message : "Unknown error.");
+        }
+      } else { setFetchError("Firebase not configured."); }
+      setIsLoading(false);
+    }
+    fetchBookData();
+  };
 
   if (isLoading || authIsLoading) {
     return (
@@ -58,41 +85,33 @@ export default function BookDetailsPage() {
       </div>
     );
   }
-
-  if (!firebaseConfigured) {
-    return (
-      <div className="max-w-4xl mx-auto text-center py-10">
-        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-bold text-destructive mb-2">Firebase Not Configured</h1>
-        <p className="text-muted-foreground">Book details cannot be loaded. Please configure Firebase in <code>.env.local</code>.</p>
-        <Button variant="outline" asChild className="mt-6">
-            <Link href="/shop">Back to Shop</Link>
-        </Button>
-      </div>
-    );
-  }
   
-  if (fetchError && !book) { // If there was an error and no book was found
-     // If the specific error was "Book not found", trigger Next.js 404
+  if (fetchError && !book) {
     if (fetchError.toLowerCase().includes("book not found")) {
         notFound();
     }
-    // For other errors, display an error message
     return (
-      <div className="max-w-4xl mx-auto text-center py-10">
-        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-bold text-destructive mb-2">Error Loading Book</h1>
-        <p className="text-muted-foreground">{fetchError}</p>
-         <Button variant="outline" asChild className="mt-6">
-            <Link href="/shop">Back to Shop</Link>
-        </Button>
-      </div>
+      <ErrorDisplay
+        title="Error Loading Book"
+        message={fetchError}
+        retryAction={firebaseConfigured ? handleRetry : undefined}
+        showHomeButton={true}
+      />
+    );
+  }
+  
+  if (!firebaseConfigured && !book) {
+     return (
+      <ErrorDisplay
+        title="Firebase Not Configured"
+        message="Book details cannot be loaded. Please configure Firebase."
+        showHomeButton={true}
+      />
     );
   }
 
+
   if (!book) {
-    // This will be caught if fetchBook sets book to null and no error, or if error wasn't "not found"
-    // but still resulted in no book.
     notFound();
   }
 

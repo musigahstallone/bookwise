@@ -1,11 +1,13 @@
 
-import { getBooksByAuthorFromDb } from '@/lib/book-service-firebase'; // Updated
+import { getBooksByAuthorFromDb } from '@/lib/book-service-firebase'; 
 import type { Book } from '@/data/books';
 import BookCard from '@/components/books/BookCard';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { ArrowLeft, UserCircle, AlertTriangle } from 'lucide-react';
+import { UserCircle, ArrowLeft } from 'lucide-react';
 import { notFound } from 'next/navigation';
+import ErrorDisplay from '@/components/layout/ErrorDisplay'; // New Import
+import { revalidatePath } from 'next/cache';
 
 
 interface AuthorPageProps {
@@ -22,51 +24,44 @@ export default async function AuthorPage({ params }: AuthorPageProps) {
     decodedAuthorName = decodeURIComponent(params.authorName);
   } catch (error) {
     console.error("Error decoding author name:", error);
-    notFound(); // Invalid author name format
+    notFound(); 
   }
 
 
   if (firebaseConfigured) {
     try {
         authorBooks = await getBooksByAuthorFromDb(decodedAuthorName);
-        // We determine if an author "exists" if they have books or if we had a separate authors collection.
-        // For now, if no books are found by this author in Firestore, we can assume the author might not exist
-        // in our catalog or has no books listed.
-        if (authorBooks.length === 0) {
-             // Check if *any* book has this author, even if getBooksByAuthorFromDb is empty.
-             // This is more of a sanity check for a "valid" author name even if no books currently.
-             // This logic can be refined if you have a separate 'authors' collection in Firestore.
-             // For now, if no books, we'll show "no books found". A true 404 might be if the author name format is invalid.
-        }
     } catch (error) {
         console.error(`Error fetching books for author ${decodedAuthorName}:`, error);
-        fetchError = error instanceof Error ? error.message : "An unknown error occurred.";
+        fetchError = error instanceof Error ? error.message : "An unknown error occurred while fetching author's books.";
     }
+  }
+
+  const handleRetry = async () => {
+    'use server';
+    revalidatePath(`/authors/${params.authorName}`);
   }
 
 
   if (!firebaseConfigured) {
      return (
-      <div className="max-w-4xl mx-auto text-center py-10">
-        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-bold text-destructive mb-2">Firebase Not Configured</h1>
-        <p className="text-muted-foreground">Author details cannot be loaded. Please configure Firebase in <code>.env.local</code>.</p>
-         <Button variant="outline" asChild className="mt-6">
-            <Link href="/shop">Back to Shop</Link>
-        </Button>
+      <div className="max-w-4xl mx-auto py-10">
+        <ErrorDisplay
+          title="Firebase Not Configured"
+          message="Author details cannot be loaded. Please configure Firebase in .env.local."
+        />
       </div>
     );
   }
 
   if (fetchError) {
     return (
-      <div className="max-w-4xl mx-auto text-center py-10">
-        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-bold text-destructive mb-2">Error Loading Author's Books</h1>
-        <p className="text-muted-foreground">{fetchError}</p>
-         <Button variant="outline" asChild className="mt-6">
-            <Link href="/shop">Back to Shop</Link>
-        </Button>
+      <div className="max-w-4xl mx-auto py-10">
+        <ErrorDisplay
+          title="Error Loading Author's Books"
+          message={fetchError}
+          retryAction={handleRetry}
+        />
       </div>
     );
   }
@@ -84,7 +79,6 @@ export default async function AuthorPage({ params }: AuthorPageProps) {
       <div className="text-center mb-10">
         <UserCircle className="mx-auto h-20 w-20 text-primary mb-4" />
         <h1 className="text-4xl font-headline font-bold text-primary">{decodedAuthorName}</h1>
-        {/* Placeholder for author bio - could be added to Firestore later */}
       </div>
 
       {authorBooks.length > 0 ? (

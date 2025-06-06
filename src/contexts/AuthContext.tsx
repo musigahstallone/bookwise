@@ -1,22 +1,21 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
 import { getUserDocumentFromDb } from '@/lib/user-service-firebase';
-import type { User as FirestoreUser } from '@/data/users'; // This is your custom user type with role
+import type { User as FirestoreUser } from '@/data/users';
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 
 export interface CombinedUser extends FirebaseUser {
-  firestoreData?: FirestoreUser; // Contains role, name from your DB
+  firestoreData?: FirestoreUser; 
 }
 
 interface AuthContextType {
   currentUser: CombinedUser | null;
   isLoading: boolean;
-  // Login and signup are now handled by pages using Firebase SDK directly
   logout: () => Promise<void>;
-  // We might re-introduce login/signup helpers here if needed, but pages can manage them
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,6 +23,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<CombinedUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast(); // Initialize toast
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -34,14 +34,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (firestoreUserDoc) {
             setCurrentUser({ ...firebaseUser, firestoreData: firestoreUserDoc });
           } else {
-            // This case might happen if Firestore doc creation failed or is delayed
-            // Or if a user exists in Firebase Auth but not in your Firestore `users` collection
-            console.warn(`No Firestore document found for UID: ${firebaseUser.uid}. User might not have a role.`);
-            setCurrentUser(firebaseUser as CombinedUser); // Store Firebase user, but firestoreData will be undefined
+            console.warn(`No Firestore document found for UID: ${firebaseUser.uid}. User might not have full profile data yet (e.g., role). This can happen briefly during signup or if Firestore doc creation failed.`);
+            // It's critical the user knows if their profile data (especially role) couldn't be loaded.
+            toast({
+              title: "Profile Data Incomplete",
+              description: "Could not load all your profile details. Some features might be limited. Please try refreshing or contact support if this persists.",
+              variant: "destructive",
+              duration: 7000,
+            });
+            setCurrentUser(firebaseUser as CombinedUser); 
           }
         } catch (error) {
           console.error("Error fetching user document from Firestore:", error);
-          setCurrentUser(firebaseUser as CombinedUser); // Fallback to Firebase user only
+          toast({ // Notify user about failure to fetch their profile
+            title: "Error Loading Profile",
+            description: "We couldn't load your profile data. Please try again later.",
+            variant: "destructive",
+          });
+          setCurrentUser(firebaseUser as CombinedUser); 
         }
       } else {
         setCurrentUser(null);
@@ -50,16 +60,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [toast]); // Added toast to dependency array
 
   const logout = async () => {
     setIsLoading(true);
     try {
       await firebaseSignOut(auth);
       setCurrentUser(null);
+      toast({
+        title: "Logged Out",
+        description: "You have been successfully logged out.",
+      });
     } catch (error) {
       console.error("Error signing out:", error);
-      // Optionally show a toast to the user
+      toast({
+        title: "Logout Failed",
+        description: error instanceof Error ? error.message : "An unknown error occurred.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }

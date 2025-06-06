@@ -1,8 +1,9 @@
 
 import type { Book } from '@/data/books';
-import { getAllBooksFromDb } from '@/lib/book-service-firebase'; // Updated
+import { getAllBooksFromDb } from '@/lib/book-service-firebase';
 import BookSearchClient from '@/components/books/BookSearchClient';
-import { AlertTriangle } from 'lucide-react';
+import ErrorDisplay from '@/components/layout/ErrorDisplay'; // New Import
+import { revalidatePath } from 'next/cache';
 
 export default async function ShopPage() {
   let allBooks: Book[] = [];
@@ -17,6 +18,11 @@ export default async function ShopPage() {
       fetchError = error instanceof Error ? error.message : "An unknown error occurred while fetching books.";
     }
   }
+  
+  const handleRetry = async () => {
+    'use server';
+    revalidatePath('/shop');
+  }
 
   return (
     <div className="space-y-8">
@@ -26,17 +32,19 @@ export default async function ShopPage() {
       </section>
       
       {!firebaseConfigured && (
-        <div className="mt-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
-            <p className="font-bold flex items-center"><AlertTriangle className="mr-2 h-5 w-5" /> Firebase Not Configured</p>
-            <p>The book catalog cannot be loaded because Firebase is not configured. Please check your <code>.env.local</code> settings.</p>
-        </div>
+        <ErrorDisplay 
+          title="Firebase Not Configured"
+          message="The book catalog cannot be loaded because Firebase is not configured. Please check your .env.local settings."
+          showHomeButton={false}
+        />
       )}
 
       {firebaseConfigured && fetchError && (
-        <div className="mt-6 p-4 bg-destructive/10 border-l-4 border-destructive text-destructive-foreground rounded-md">
-            <p className="font-bold flex items-center"><AlertTriangle className="mr-2 h-5 w-5" /> Error Loading Books</p>
-            <p>{fetchError} Please try again later or contact support.</p>
-        </div>
+        <ErrorDisplay 
+          title="Error Loading Books"
+          message={`${fetchError} Please try again later or contact support.`}
+          retryAction={handleRetry}
+        />
       )}
 
       {firebaseConfigured && !fetchError && <BookSearchClient allBooks={allBooks} />}

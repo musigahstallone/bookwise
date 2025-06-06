@@ -1,8 +1,10 @@
 
 import AIRecommenderClient from '@/components/ai/AIRecommenderClient';
-import { getAllBooksFromDb } from '@/lib/book-service-firebase'; // Updated
+import { getAllBooksFromDb } from '@/lib/book-service-firebase'; 
 import type { Book } from '@/data/books';
-import { Sparkles, AlertTriangle } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
+import ErrorDisplay from '@/components/layout/ErrorDisplay'; // New Import
+import { revalidatePath } from 'next/cache';
 
 export default async function RecommendationsPage() {
   let allBooks: Book[] = [];
@@ -19,8 +21,13 @@ export default async function RecommendationsPage() {
       }));
     } catch (error) {
       console.error("Error fetching books for recommendations:", error);
-      fetchError = error instanceof Error ? error.message : "An unknown error occurred while fetching books.";
+      fetchError = error instanceof Error ? error.message : "An unknown error occurred while fetching books for the AI recommender.";
     }
+  }
+
+  const handleRetry = async () => {
+    'use server';
+    revalidatePath('/recommendations');
   }
   
   return (
@@ -34,17 +41,21 @@ export default async function RecommendationsPage() {
       </div>
 
       {!firebaseConfigured && (
-        <div className="mt-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md text-center">
-            <p className="font-bold flex items-center justify-center"><AlertTriangle className="mr-2 h-5 w-5" /> Firebase Not Configured</p>
-            <p>The AI Recommender needs book data from Firebase. Please configure your <code>.env.local</code> settings.</p>
-        </div>
+        <ErrorDisplay
+          title="Firebase Not Configured"
+          message="The AI Recommender needs book data from Firebase. Please configure your .env.local settings."
+          showHomeButton={false}
+          className="text-center"
+        />
       )}
 
       {firebaseConfigured && fetchError && (
-        <div className="mt-6 p-4 bg-destructive/10 border-l-4 border-destructive text-destructive-foreground rounded-md text-center">
-            <p className="font-bold flex items-center justify-center"><AlertTriangle className="mr-2 h-5 w-5" /> Error Loading Book Data</p>
-            <p>{fetchError}</p>
-        </div>
+        <ErrorDisplay
+          title="Error Loading Book Data for AI"
+          message={fetchError}
+          retryAction={handleRetry}
+          className="text-center"
+        />
       )}
       
       {firebaseConfigured && !fetchError && (
