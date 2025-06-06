@@ -1,12 +1,21 @@
 
+'use client'; // Add this directive
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BookCopy, Users, BarChart3, AlertTriangle, Info } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { getAllBooksAdmin } from '@/lib/book-service'; // To get book count
+import { useEffect, useState } from 'react'; // Import hooks for client component
 
 export default function AdminDashboardPage() {
-  const bookCount = getAllBooksAdmin().length;
+  // State to hold the book count, as direct calls in render body are for server components
+  const [bookCount, setBookCount] = useState(0);
+
+  useEffect(() => {
+    // Fetch book count on the client side
+    setBookCount(getAllBooksAdmin().length);
+  }, []);
 
   const stats = [
     { title: 'Total Books in Catalog', value: bookCount.toString(), icon: BookCopy, href: '/admin/books', description: 'Manage current book catalog' },
