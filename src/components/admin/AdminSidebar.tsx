@@ -3,13 +3,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, BookCopy, Settings } from 'lucide-react';
+import { Home, BookCopy, Users as UsersIcon, Settings } from 'lucide-react'; // Renamed Users to UsersIcon to avoid conflict
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: Home },
   { href: '/admin/books', label: 'Manage Books', icon: BookCopy },
+  { href: '/admin/users', label: 'Manage Users', icon: UsersIcon }, // Added Users link
   // { href: '/admin/settings', label: 'Settings', icon: Settings }, // Example for future
 ];
 

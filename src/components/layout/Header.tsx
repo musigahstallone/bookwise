@@ -2,10 +2,10 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpen, Sparkles, Menu, X, ShoppingCart, Globe } from 'lucide-react';
+import { BookOpen, Sparkles, Menu, X, ShoppingCart, Globe, LogIn, LogOut, UserCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { useCart } from '@/contexts/CartContext';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRegion } from '@/contexts/RegionContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -26,8 +35,14 @@ const navLinks = [
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+
   const { getItemCount } = useCart();
   const { selectedRegion, availableRegions, setSelectedRegionByCode } = useRegion();
+  const { currentUser, isLoading: authLoading, login, logout } = useAuth();
+  const { toast } = useToast();
   const itemCount = getItemCount();
 
   const headerClasses = cn(
@@ -41,6 +56,76 @@ const Header = () => {
   const iconButtonClasses = cn(
     "text-foreground hover:text-primary"
   );
+
+  const handleLoginSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail) {
+        toast({ title: "Login Error", description: "Please enter an email.", variant: "destructive"});
+        return;
+    }
+    setIsLoggingIn(true);
+    const success = await login(loginEmail);
+    if (success) {
+      toast({ title: "Login Successful", description: `Welcome back, ${loginEmail}!` });
+      setIsPopoverOpen(false); // Close popover on successful login
+      setLoginEmail(''); // Clear input
+    } else {
+      toast({ title: "Login Failed", description: "Email not recognized or error occurred.", variant: "destructive" });
+    }
+    setIsLoggingIn(false);
+  };
+
+  const renderAuthSection = (isMobile = false) => {
+    if (authLoading) {
+      return <Loader2 className="h-6 w-6 animate-spin text-primary" />;
+    }
+
+    if (currentUser) {
+      return (
+        <div className={cn("flex items-center", isMobile ? "flex-col space-y-2 items-start w-full" : "space-x-2")}>
+          <span className={cn("text-sm text-muted-foreground hidden md:inline", isMobile && "block text-base mb-1")}>
+             {currentUser.role === 'admin' && <Badge variant="destructive" className="mr-2">Admin</Badge>}
+             {currentUser.email}
+          </span>
+           <UserCircle className={cn("h-6 w-6 text-primary md:hidden", isMobile && "mr-2 h-5 w-5 inline-block")} />
+          <Button variant={isMobile ? "outline" : "ghost"} size={isMobile ? "default" : "sm"} onClick={() => {logout(); setIsMobileMenuOpen(false);}} className={cn(isMobile && "w-full justify-start")}>
+            <LogOut className="mr-2 h-4 w-4" /> Logout
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+        <PopoverTrigger asChild>
+          <Button variant={isMobile ? "outline" : "ghost"} size={isMobile ? "default" : "sm"} className={cn(isMobile && "w-full justify-start")}>
+            <LogIn className="mr-2 h-4 w-4" /> Login
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-72 p-4">
+          <form onSubmit={handleLoginSubmit} className="space-y-3">
+            <h4 className="font-medium leading-none text-sm">Mock Login</h4>
+            <p className="text-xs text-muted-foreground">
+              Enter an email to simulate login. <br/>
+              Admin: <code>odhiambostallone73@gmail.com</code><br/>
+              User: <code>musigahstallone@gmail.com</code>
+            </p>
+            <Input
+              type="email"
+              placeholder="Enter your email"
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              disabled={isLoggingIn}
+            />
+            <Button type="submit" className="w-full" disabled={isLoggingIn}>
+              {isLoggingIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Login"}
+            </Button>
+          </form>
+        </PopoverContent>
+      </Popover>
+    );
+  };
+
 
   return (
     <header className={headerClasses}>
@@ -90,6 +175,9 @@ const Header = () => {
               </SelectContent>
             </Select>
           </div>
+          <div className="ml-2 pl-2 border-l">
+            {renderAuthSection()}
+          </div>
         </nav>
 
         {/* Mobile Navigation */}
@@ -124,12 +212,17 @@ const Header = () => {
                   </SheetClose>
               </SheetHeader>
               <nav className="flex flex-col space-y-3">
+                {currentUser && (
+                  <div className="px-3 py-2 border-b mb-2">
+                      <p className="text-sm font-medium text-foreground">{currentUser.name}</p>
+                      <p className="text-xs text-muted-foreground">{currentUser.email} {currentUser.role === 'admin' && <Badge variant="destructive" className="ml-1">Admin</Badge>}</p>
+                  </div>
+                )}
                 {navLinks.map((link) => (
                   <SheetClose asChild key={link.href}>
                     <Link
                       href={link.href}
                       className="flex items-center py-3 px-3 text-lg text-card-foreground hover:bg-muted rounded-md transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
                     >
                       {link.icon && <span className="mr-3">{link.icon}</span>}
                       {link.label}
@@ -140,7 +233,6 @@ const Header = () => {
                   <Link
                     href="/cart"
                     className="flex items-center py-3 px-3 text-lg text-card-foreground hover:bg-muted rounded-md transition-colors"
-                    onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <ShoppingCart className="h-5 w-5 mr-3" />
                     Cart
@@ -165,6 +257,10 @@ const Header = () => {
                             ))}
                         </SelectContent>
                     </Select>
+                 </div>
+                 <div className="px-3 pt-3 border-t mt-3">
+                    <p className="text-sm text-muted-foreground mb-2">Account:</p>
+                    {renderAuthSection(true)}
                  </div>
               </nav>
             </SheetContent>

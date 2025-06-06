@@ -1,23 +1,29 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BookCopy, Users, BarChart3, AlertTriangle, Info, Database } from 'lucide-react';
+import { BookCopy, Users, BarChart3, AlertTriangle, Info, Database, DownloadCloud, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { countBooksInDb } from '@/lib/book-service-firebase'; // Updated import
-import SeedDatabaseButton from '@/components/admin/SeedDatabaseButton'; // New component for the button
+import { countBooksInDb } from '@/lib/book-service-firebase';
+import { countUsersInDb } from '@/lib/user-service-firebase'; // New import
+import SeedDatabaseButton from '@/components/admin/SeedDatabaseButton';
+import SeedUsersButton from '@/components/admin/SeedUsersButton'; // New import for user seeding
 
 export default async function AdminDashboardPage() {
   let bookCount = 0;
+  let userCount = 0; // New state for user count
   let firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 
   if (firebaseConfigured) {
     bookCount = await countBooksInDb();
+    userCount = await countUsersInDb(); // Fetch user count
   }
 
   const stats = [
-    { title: 'Total Books in Catalog', value: firebaseConfigured ? bookCount.toString() : 'N/A (Firebase not configured)', icon: BookCopy, href: '/admin/books', description: 'Manage current book catalog' },
-    { title: 'Total Registered Users', value: 'N/A', icon: Users, description: 'Requires Firebase Authentication & Firestore' },
-    { title: 'Sales Overview', value: 'N/A', icon: BarChart3, description: 'Requires Firestore for order data' },
+    { title: 'Total Books in Catalog', value: firebaseConfigured ? bookCount.toString() : 'N/A', icon: BookCopy, href: '/admin/books', description: 'Manage current book catalog' },
+    { title: 'Total Registered Users', value: firebaseConfigured ? userCount.toString() : 'N/A', icon: Users, href: '#', description: 'View and manage users (Coming Soon)' }, // Updated
+    { title: 'New Users (Today)', value: 'N/A', icon: UserPlus, description: 'Requires user activity tracking' },
+    { title: 'Total Downloads', value: 'N/A', icon: DownloadCloud, description: 'Requires download logging' },
+    { title: 'Sales Overview', value: 'N/A', icon: BarChart3, description: 'Requires order & payment integration' },
   ];
 
   return (
@@ -36,7 +42,7 @@ export default async function AdminDashboardPage() {
           <CardContent>
             <p className="text-destructive-foreground">
               Firebase Project ID is not set in your environment variables. Please configure <code>.env.local</code> with your Firebase project details.
-              Features like book management and PDF uploads will not work correctly until Firebase is configured. Refer to <code>README.md</code>.
+              Features like book management, user data, and PDF uploads will not work correctly until Firebase is configured. Refer to <code>README.md</code>.
             </p>
           </CardContent>
         </Card>
@@ -52,11 +58,14 @@ export default async function AdminDashboardPage() {
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
               {stat.description && <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>}
-              {stat.href && stat.value !== 'N/A' && firebaseConfigured && (
+              {stat.href && stat.value !== 'N/A' && firebaseConfigured && stat.href !== '#' && (
                 <Button variant="link" asChild className="px-0 pt-2">
                   <Link href={stat.href}>View Details</Link>
                 </Button>
               )}
+               {stat.href === '#' && stat.value !== 'N/A' && (
+                 <p className="text-xs text-blue-500 mt-2">Feature coming soon.</p>
+               )}
             </CardContent>
           </Card>
         ))}
@@ -68,10 +77,11 @@ export default async function AdminDashboardPage() {
                 <CardTitle className="flex items-center">
                     <Database className="mr-2 h-5 w-5"/> Database Actions
                 </CardTitle>
-                <CardDescription>Perform actions like seeding the database from mock data.</CardDescription>
+                <CardDescription>Perform actions like seeding the database with mock data.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col sm:flex-row gap-4">
                 <SeedDatabaseButton />
+                <SeedUsersButton /> {/* Added seed users button */}
             </CardContent>
         </Card>
       )}
@@ -88,24 +98,35 @@ export default async function AdminDashboardPage() {
           <Button variant="outline" asChild disabled={!firebaseConfigured}>
             <Link href="/admin/books">Manage Books</Link>
           </Button>
+           <Button variant="outline" asChild disabled={!firebaseConfigured}>
+            <Link href="/admin/users">Manage Users</Link>
+          </Button>
         </CardContent>
       </Card>
 
       <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-700 rounded-md">
-        <p className="font-bold flex items-center"><Info className="mr-2 h-5 w-5" />Placeholder Statistics:</p>
-        <p>Features like 'Total Registered Users' and 'Sales Overview' are placeholders. Full functionality requires further integration with Firebase services like Authentication (for user data) and Firestore (for order and sales data).</p>
+        <p className="font-bold flex items-center"><Info className="mr-2 h-5 w-5" />Authentication & Tracking Note:</p>
+        <p>
+          - A **mock authentication** system is in place. Login with pre-defined emails (see Header login popover). Admin access is based on this mock login.
+        </p>
+        <p>
+          - Features like "New Users Today," "Total Downloads," and "Sales Overview" require full Firebase Authentication, user activity logging to Firestore, and payment integration. They are currently placeholders.
+        </p>
+         <p>
+          - Cart functionality remains **browser-specific** (using localStorage). True user-specific carts require full Firebase Authentication and storing cart data in Firestore.
+        </p>
       </div>
       
        <div className="mt-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
         <p className="font-bold flex items-center"><AlertTriangle className="mr-2 h-5 w-5" />Important: Data Persistence Note</p>
         <p>
-          - <strong className="text-green-700">PDF Files:</strong> Uploaded PDF files are persisted in Firebase Storage.
+          - <strong className="text-green-700">PDF & Cover Image Files:</strong> Uploaded files are persisted in Firebase Storage.
         </p>
         <p>
-          - <strong className="text-orange-700">Book Metadata:</strong> Book information (title, author, etc.) is now managed in Firebase Firestore and will persist.
+          - <strong className="text-green-700">Book & User Metadata:</strong> Information is managed in Firebase Firestore and will persist.
         </p>
         <p className="mt-2">
-          The "Seed Database" action will populate Firestore with data from `src/data/books.ts`. This uses the book's `id` from the mock data as the document ID in Firestore.
+          The "Seed Database" and "Seed User Data" actions populate Firestore with data from `src/data/books.ts` and `src/data/users.ts` respectively.
         </p>
       </div>
     </div>
