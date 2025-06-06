@@ -11,16 +11,29 @@ import { Trash2, ShoppingBag, XCircle, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
-import { useRegion } from '@/contexts/RegionContext'; // Added
+import { useRegion } from '@/contexts/RegionContext';
+import { useAuth } from '@/contexts/AuthContext'; // Added
+import { handleCreateOrder } from '@/lib/actions/trackingActions'; // Added
 
 export default function CartPage() {
-  const { cartItems, removeFromCart, clearCart, getCartTotal, getItemCount } = useCart();
-  const { formatPrice } = useRegion(); // Added
+  const { cartItems, removeFromCart, clearCart, getCartTotal, getItemCount, isLoading: cartIsLoading } = useCart(); // Added cartIsLoading
+  const { selectedRegion, formatPrice } = useRegion();
+  const { currentUser } = useAuth(); // Added
   const router = useRouter();
   const { toast } = useToast();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   const handleCheckout = async () => {
+    if (!currentUser) {
+      toast({
+        title: "Login Required",
+        description: "Please log in to proceed to checkout.",
+        variant: "destructive",
+      });
+      router.push('/login?redirectUrl=/cart');
+      return;
+    }
+
     if (cartItems.length === 0) {
       toast({
         title: "Your cart is empty!",
@@ -36,33 +49,87 @@ export default function CartPage() {
       description: "Please wait a moment.",
     });
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Simulate payment processing delay (optional)
+    // await new Promise(resolve => setTimeout(resolve, 1000)); 
 
     try {
+      const orderResult = await handleCreateOrder(
+        currentUser.uid,
+        cartItems.map(item => ({ // Map to the structure expected by handleCreateOrder
+            id: item.id,
+            title: item.title,
+            author: item.author,
+            price: item.price,
+            coverImageUrl: item.coverImageUrl,
+            pdfUrl: item.pdfUrl,
+            dataAiHint: item.dataAiHint,
+            publishedYear: item.publishedYear,
+            category: item.category,
+            description: item.description,
+            longDescription: item.longDescription
+        })),
+        getCartTotal(),
+        selectedRegion.code,
+        selectedRegion.currencyCode,
+        getItemCount()
+      );
+
+      if (orderResult.success) {
         sessionStorage.setItem('lastPurchasedItems', JSON.stringify(cartItems));
-        // Store the current region code to use for formatting prices on the order summary page
-        const regionCode = localStorage.getItem('bookwiseSelectedRegion') || 'US';
-        sessionStorage.setItem('lastPurchasedRegionCode', regionCode);
-    } catch (error) {
-        console.error("Error saving to sessionStorage:", error);
+        sessionStorage.setItem('lastPurchasedRegionCode', selectedRegion.code);
+        
         toast({
-            title: "Checkout Error",
-            description: "Could not save your order details. Please try again.",
-            variant: "destructive",
+          title: "Mock Checkout Successful!",
+          description: "Your order has been recorded. Redirecting to your order summary...",
+        });
+        // Clear Firestore cart AFTER successful order creation and session storage
+        await clearCart(true); // silent clear
+        router.push(`/order-summary`);
+      } else {
+        toast({
+          title: "Checkout Failed",
+          description: orderResult.message || "Could not process your order. Please try again.",
+          variant: "destructive",
         });
         setIsCheckingOut(false);
-        return;
+      }
+    } catch (error) {
+      console.error("Error during checkout process:", error);
+      toast({
+        title: "Checkout Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+      setIsCheckingOut(false);
     }
-    
-    toast({
-      title: "Mock Checkout Successful!",
-      description: "Redirecting to your order summary...",
-    });
-    
-    router.push(`/order-summary`);
   };
+  
+  if (cartIsLoading && currentUser) { // Show loader if cart is loading for an authenticated user
+    return (
+      <div className="flex flex-col items-center justify-center text-center py-20 min-h-[60vh]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Loading your cart...</p>
+      </div>
+    );
+  }
 
-  if (cartItems.length === 0 && !isCheckingOut) {
+  if (!currentUser && !cartIsLoading) { // Prompt login if not logged in
+    return (
+      <div className="text-center py-20">
+        <ShoppingBag className="mx-auto h-24 w-24 text-muted-foreground mb-6" />
+        <h1 className="text-3xl font-headline font-bold text-primary mb-4">Your Cart Awaits</h1>
+        <p className="text-lg text-muted-foreground mb-8">
+          <Link href={`/login?redirectUrl=/cart`} className="text-primary hover:underline font-semibold">Login</Link> or <Link href={`/signup?redirectUrl=/cart`} className="text-primary hover:underline font-semibold">sign up</Link> to view and manage your shopping cart.
+        </p>
+        <Button asChild size="lg">
+          <Link href="/shop">Start Shopping</Link>
+        </Button>
+      </div>
+    );
+  }
+
+
+  if (cartItems.length === 0 && !isCheckingOut && currentUser) {
     return (
       <div className="text-center py-20">
         <ShoppingBag className="mx-auto h-24 w-24 text-muted-foreground mb-6" />
@@ -77,12 +144,13 @@ export default function CartPage() {
     );
   }
 
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-headline font-bold text-primary">Your Shopping Cart</h1>
         {cartItems.length > 0 && (
-          <Button variant="outline" onClick={() => clearCart()} className="text-destructive hover:text-destructive border-destructive/50 hover:bg-destructive/10" disabled={isCheckingOut}>
+          <Button variant="outline" onClick={() => clearCart()} className="text-destructive hover:text-destructive border-destructive/50 hover:bg-destructive/10" disabled={isCheckingOut || cartIsLoading}>
             <XCircle className="mr-2 h-4 w-4" /> Clear Cart
           </Button>
         )}
@@ -100,11 +168,11 @@ export default function CartPage() {
                   <h2 className="text-lg font-headline font-semibold text-primary">{item.title}</h2>
                 </Link>
                 <p className="text-sm text-muted-foreground">By {item.author}</p>
-                <p className="text-md font-semibold text-foreground mt-1">{formatPrice(item.price)}</p> {/* Updated price display */}
+                <p className="text-md font-semibold text-foreground mt-1">{formatPrice(item.price)}</p>
                 <p className="text-xs text-muted-foreground mt-1">Quantity: 1 (PDF Download)</p>
               </div>
               <div className="flex items-center space-x-3 mt-4 sm:mt-0 sm:ml-auto flex-shrink-0">
-                <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.id)} className="text-destructive hover:text-destructive" disabled={isCheckingOut}>
+                <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.id)} className="text-destructive hover:text-destructive" disabled={isCheckingOut || cartIsLoading}>
                   <Trash2 className="h-5 w-5" />
                   <span className="sr-only">Remove item</span>
                 </Button>
@@ -121,7 +189,7 @@ export default function CartPage() {
             <CardContent className="space-y-4">
               <div className="flex justify-between text-base">
                 <span>Subtotal ({getItemCount()} items)</span>
-                <span className="font-semibold">{formatPrice(getCartTotal())}</span> {/* Updated price display */}
+                <span className="font-semibold">{formatPrice(getCartTotal())}</span>
               </div>
               <div className="flex justify-between text-base">
                 <span>Shipping</span>
@@ -130,13 +198,13 @@ export default function CartPage() {
               <Separator />
               <div className="flex justify-between text-xl font-bold text-primary">
                 <span>Total</span>
-                <span>{formatPrice(getCartTotal())}</span> {/* Updated price display */}
+                <span>{formatPrice(getCartTotal())}</span>
               </div>
               <Button 
                 size="lg" 
                 className="w-full bg-accent hover:bg-accent/90 text-accent-foreground mt-4" 
                 onClick={handleCheckout}
-                disabled={isCheckingOut || cartItems.length === 0}
+                disabled={isCheckingOut || cartItems.length === 0 || cartIsLoading}
               >
                 {isCheckingOut ? (
                   <>

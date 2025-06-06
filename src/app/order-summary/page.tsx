@@ -9,7 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { CheckCircle, Download, ShoppingBag, Loader2, AlertTriangle } from 'lucide-react';
 import type { Book } from '@/data/books';
 import { useCart } from '@/contexts/CartContext';
-import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData'; // Added
+import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData';
+import { useAuth } from '@/contexts/AuthContext'; // Added
+import { handleRecordDownload } from '@/lib/actions/trackingActions'; // Added
+import { useToast } from '@/hooks/use-toast'; // Added
 
 interface PurchasedItem extends Book {
   // quantity is implicitly 1 for PDFs
@@ -21,6 +24,8 @@ export default function OrderSummaryPage() {
   const [error, setError] = useState<string | null>(null);
   const { clearCart } = useCart();
   const [regionForFormatting, setRegionForFormatting] = useState<Region>(defaultRegion);
+  const { currentUser } = useAuth(); // Added
+  const { toast } = useToast(); // Added
 
   useEffect(() => {
     const itemsJson = sessionStorage.getItem('lastPurchasedItems');
@@ -69,6 +74,30 @@ export default function OrderSummaryPage() {
          displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     return `${regionForFormatting.currencySymbol}${displayPrice}`;
+  };
+
+  const onDownloadClick = async (bookId: string, bookTitle: string) => {
+    if (!currentUser) {
+      toast({
+        title: "Authentication Error",
+        description: "You must be logged in to record a download.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const result = await handleRecordDownload(bookId, currentUser.uid);
+    if (result.success) {
+      toast({
+        title: "Download Recorded",
+        description: `Your download of "${bookTitle}" has been logged.`,
+      });
+    } else {
+      toast({
+        title: "Download Logging Failed",
+        description: result.message || `Could not log download for "${bookTitle}".`,
+        variant: "destructive",
+      });
+    }
   };
 
   if (isLoading) {
@@ -140,9 +169,14 @@ export default function OrderSummaryPage() {
               <div className="flex-grow text-center sm:text-left">
                 <h3 className="text-lg font-headline font-semibold text-primary">{book.title}</h3>
                 <p className="text-sm text-muted-foreground">By {book.author}</p>
-                <p className="text-sm text-foreground font-medium">{formatPriceInOrderCurrency(book.price)}</p> {/* Updated price display */}
+                <p className="text-sm text-foreground font-medium">{formatPriceInOrderCurrency(book.price)}</p>
               </div>
-              <Button asChild size="sm" className="w-full sm:w-auto mt-2 sm:mt-0">
+              <Button 
+                asChild 
+                size="sm" 
+                className="w-full sm:w-auto mt-2 sm:mt-0"
+                onClick={() => onDownloadClick(book.id, book.title)}
+              >
                 <a href={book.pdfUrl} download={`${book.title.replace(/\s+/g, '_')}.pdf`}>
                   <Download className="mr-2 h-4 w-4" />
                   Download PDF
