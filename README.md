@@ -1,28 +1,31 @@
 
-# BookWise - Your Smart Online Bookstore
+# BookWise - Your Smart Online Bookstore (Firebase Integrated)
 
-BookWise is a modern, digital-first online bookstore built with Next.js, React, and Tailwind CSS. It leverages AI for book recommendations and aims to provide a seamless shopping experience for book lovers. This project also includes an Admin Dashboard for managing books, including PDF uploads to Firebase Storage.
+BookWise is a modern, digital-first online bookstore built with Next.js, React, and Tailwind CSS. It leverages AI for book recommendations and aims to provide a seamless shopping experience for book lovers. This project integrates Firebase Firestore for book data management and Firebase Storage for PDF file hosting.
 
 ## ✨ Features
 
-*   **Next.js App Router**: For optimized routing and server components.
+*   **Next.js App Router**: For optimized routing and Server Components.
 *   **React & TypeScript**: For a robust and type-safe frontend.
 *   **ShadCN UI & Tailwind CSS**: For a beautiful, responsive, and customizable user interface.
 *   **Genkit**: For integrating AI-powered book recommendations.
+*   **Firebase Firestore**: For persistent storage and management of book metadata.
 *   **Firebase Storage**: For hosting book PDF files uploaded via the admin panel.
 *   **Landing Page**: Engaging introduction to BookWise.
-*   **Shop Page**: Browse and filter books with pagination.
-*   **AI Book Advisor**: Get personalized book suggestions.
+*   **Shop Page**: Browse and filter books from Firestore, with pagination.
+*   **AI Book Advisor**: Get personalized book suggestions based on Firestore data.
 *   **Shopping Cart**: Add books and proceed to a mock checkout with an order summary page.
-*   **Author Pages**: View books by a specific author.
+*   **Author Pages**: View books by a specific author, fetched from Firestore.
 *   **Static Pages**: About, Contact, Privacy Policy, Terms & Conditions.
 *   **Admin Dashboard**:
-    *   Manage books (CRUD operations).
-    *   Upload PDF files for books directly to Firebase Storage.
-    *   View basic site statistics (total books).
+    *   Manage books (CRUD operations) interacting directly with Firebase Firestore.
+    *   Upload PDF files for books directly to Firebase Storage (URL stored in Firestore).
+    *   Seed database: Populate Firestore with initial book data from `src/data/books.ts`.
+    *   View basic site statistics (total books from Firestore).
     *   Pagination for book lists.
     *   Mobile-responsive design.
 *   **Mobile-Friendly Design**: Responsive layout for all devices, including the admin panel.
+*   **Server Actions**: Used for mutations (add, update, delete, seed) to ensure data integrity and server-side logic.
 
 ## 🚀 Getting Started
 
@@ -31,6 +34,7 @@ BookWise is a modern, digital-first online bookstore built with Next.js, React, 
 *   Node.js (v18 or later recommended)
 *   npm or yarn
 *   A Firebase Project:
+    *   Set up Firebase Firestore (Native mode).
     *   Set up Firebase Storage.
     *   Obtain your Firebase project configuration credentials.
 
@@ -50,11 +54,11 @@ BookWise is a modern, digital-first online bookstore built with Next.js, React, 
     ```
 
 3.  **Set up environment variables:**
-    Create a `.env.local` file in the root directory by copying `.env` (if it exists as a template) or creating it manually. Add your Firebase project configuration:
+    Create a `.env.local` file in the root directory by copying `.env` or creating it manually. Add your Firebase project configuration:
     ```env
     NEXT_PUBLIC_FIREBASE_API_KEY="YOUR_FIREBASE_API_KEY"
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="YOUR_FIREBASE_AUTH_DOMAIN"
-    NEXT_PUBLIC_FIREBASE_PROJECT_ID="YOUR_FIREBASE_PROJECT_ID"
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID="YOUR_FIREBASE_PROJECT_ID" # Crucial for Firestore/Storage
     NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="YOUR_FIREBASE_STORAGE_BUCKET"
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="YOUR_FIREBASE_MESSAGING_SENDER_ID"
     NEXT_PUBLIC_FIREBASE_APP_ID="YOUR_FIREBASE_APP_ID"
@@ -63,22 +67,39 @@ BookWise is a modern, digital-first online bookstore built with Next.js, React, 
     # If using Genkit with Google AI, also include:
     # GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY_HERE"
     ```
+    **Important**: `NEXT_PUBLIC_FIREBASE_PROJECT_ID` is essential for Firebase services to work.
 
-4.  **Configure Firebase Storage Rules (for development/prototyping):**
-    In your Firebase Console, navigate to Storage > Rules. For easy development and testing of PDF uploads, you can use permissive rules. **IMPORTANT: These rules are NOT secure for production.**
-    ```
-    rules_version = '2';
-    service firebase.storage {
-      match /b/{bucket}/o {
-        match /{allPaths=**} {
-          // Allow read and write access to all paths for development
-          // THIS IS NOT SECURE FOR PRODUCTION
-          allow read, write: if true;
+4.  **Configure Firebase Security Rules (for development/prototyping):**
+    In your Firebase Console:
+
+    *   **Firestore > Rules**: For easy development, you can use permissive rules. **IMPORTANT: These rules are NOT secure for production.**
+        ```
+        rules_version = '2';
+        service cloud.firestore {
+          match /databases/{database}/documents {
+            match /{document=**} {
+              // Allow read and write access to all paths for development
+              // THIS IS NOT SECURE FOR PRODUCTION
+              allow read, write: if true;
+            }
+          }
         }
-      }
-    }
-    ```
-    For production, you would implement stricter rules, typically allowing writes only for authenticated admin users.
+        ```
+
+    *   **Storage > Rules**: Similarly, for PDF uploads.
+        ```
+        rules_version = '2';
+        service firebase.storage {
+          match /b/{bucket}/o {
+            match /{allPaths=**} {
+              // Allow read and write access to all paths for development
+              // THIS IS NOT SECURE FOR PRODUCTION
+              allow read, write: if true;
+            }
+          }
+        }
+        ```
+    For production, you would implement stricter rules, typically allowing writes only for authenticated admin users and appropriate read access for users.
 
 ### Running the Development Server
 
@@ -101,10 +122,17 @@ BookWise is a modern, digital-first online bookstore built with Next.js, React, 
 Open [http://localhost:9002](http://localhost:9002) with your browser to see the application.
 The admin panel is accessible at [http://localhost:9002/admin](http://localhost:9002/admin).
 
-## 📝 Important Notes for Admin Panel
+### Seeding the Database
 
-*   **Data Persistence**: Book metadata modifications (add, edit, delete names, descriptions, etc.) made in the admin panel are currently for the **current session only** and are stored in-memory. They will not persist across server restarts or application rebuilds. PDF files uploaded will persist in Firebase Storage. For full persistence of book metadata, integration with a database like Firebase Firestore is required.
-*   **No Authentication**: The admin panel (`/admin`) is currently publicly accessible. In a production environment, this would need to be secured with authentication.
+Once Firebase is configured and your app is running:
+1.  Navigate to the Admin Dashboard (`/admin`).
+2.  Click the "Seed Database with Mock Data" button. This will populate your Firestore 'books' collection with the initial data from `src/data/books.ts`.
+
+## 📝 Important Notes
+
+*   **Authentication**: The admin panel (`/admin`) is currently publicly accessible. In a production environment, this would need to be secured with authentication (e.g., Firebase Authentication).
+*   **Firebase Costs**: Be mindful of Firebase usage, especially with Firestore reads/writes and Storage, as usage beyond the free tier may incur costs.
+*   **Error Handling**: Basic error handling is in place. More robust error management might be needed for production.
 
 ## 🛠️ Scripts
 
@@ -116,23 +144,13 @@ The admin panel is accessible at [http://localhost:9002/admin](http://localhost:
 *   `npm run lint`: Lints the codebase.
 *   `npm run typecheck`: Runs TypeScript type checking.
 
-## 📁 Project Structure
+## 📁 Project Structure (Key Firebase-related files)
 
-*   `src/app/`: Main application routes (App Router).
-    *   `src/app/admin/`: Admin panel routes.
-*   `src/components/`: Reusable UI components.
-    *   `src/components/ui/`: ShadCN UI components.
-    *   `src/components/layout/`: Header, Footer, etc.
-    *   `src/components/books/`: Book-specific components (BookCard, etc.).
-    *   `src/components/ai/`: AI-related client components.
-    *   `src/components/admin/`: Admin panel specific components.
-*   `src/ai/`: Genkit related files.
-    *   `src/ai/flows/`: Genkit flow definitions.
-*   `src/contexts/`: React context providers (e.g., CartContext).
-*   `src/data/`: Static data (e.g., initial book catalog).
-*   `src/hooks/`: Custom React hooks.
-*   `src/lib/`: Utility functions, Firebase config, book service.
-*   `public/`: Static assets (e.g., placeholder PDFs).
+*   `src/lib/firebase.ts`: Firebase app initialization (Auth, Firestore, Storage).
+*   `src/lib/book-service-firebase.ts`: Core functions for interacting with Firestore 'books' collection.
+*   `src/lib/actions/bookActions.ts`: Server Actions for book CRUD operations and seeding.
+*   `src/app/admin/`: Admin panel routes, now interacting with Firestore.
+*   `src/data/books.ts`: Contains the initial mock book data used for seeding.
 
 ## 🤝 Contributing
 

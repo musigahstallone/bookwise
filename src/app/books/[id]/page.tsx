@@ -1,47 +1,64 @@
 
-'use client';
-
-import { getBookById, type Book } from '@/data/books';
+import { getBookByIdFromDb } from '@/lib/book-service-firebase'; // Updated
+import type { Book } from '@/data/books';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
-import { notFound, useParams } from 'next/navigation';
-import { ShoppingCart, ArrowLeft } from 'lucide-react';
-import { useCart } from '@/contexts/CartContext';
-import { useEffect, useState } from 'react';
+import { notFound } from 'next/navigation';
+import { ShoppingCart, ArrowLeft, AlertTriangle } from 'lucide-react';
+// BuyButtonClient might be removed or re-evaluated if AddToCart is primary action
+// For now, keep AddToCart from CartContext
+import AddToCartButton from '@/components/books/AddToCartButton'; // New client component for cart interaction
 
+interface BookDetailsPageProps {
+  params: { id: string };
+}
 
-export default function BookDetailsPage() {
-  const params = useParams<{ id: string }>();
-  const { addToCart } = useCart();
-  const [book, setBook] = useState<Book | null | undefined>(undefined);
+export default async function BookDetailsPage({ params }: BookDetailsPageProps) {
+  const firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  let book: Book | null = null;
+  let fetchError: string | null = null;
 
-  useEffect(() => {
-    if (params.id) {
-      const foundBook = getBookById(params.id);
-      setBook(foundBook);
+  if (firebaseConfigured) {
+    try {
+      book = await getBookByIdFromDb(params.id);
+    } catch (error) {
+      console.error(`Error fetching book ${params.id}:`, error);
+      fetchError = error instanceof Error ? error.message : "An unknown error occurred.";
     }
-  }, [params.id]);
+  }
 
-
-  if (book === undefined) {
+  if (!firebaseConfigured) {
     return (
       <div className="max-w-4xl mx-auto text-center py-10">
-        <p>Loading book details...</p>
+        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
+        <h1 className="text-2xl font-bold text-destructive mb-2">Firebase Not Configured</h1>
+        <p className="text-muted-foreground">Book details cannot be loaded. Please configure Firebase in <code>.env.local</code>.</p>
+        <Button variant="outline" asChild className="mt-6">
+            <Link href="/shop">Back to Shop</Link>
+        </Button>
+      </div>
+    );
+  }
+  
+  if (fetchError) {
+     return (
+      <div className="max-w-4xl mx-auto text-center py-10">
+        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
+        <h1 className="text-2xl font-bold text-destructive mb-2">Error Loading Book</h1>
+        <p className="text-muted-foreground">{fetchError}</p>
+         <Button variant="outline" asChild className="mt-6">
+            <Link href="/shop">Back to Shop</Link>
+        </Button>
       </div>
     );
   }
 
-
   if (!book) {
     notFound();
   }
-
-  const handleAddToCart = () => {
-    addToCart(book);
-  };
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -58,8 +75,9 @@ export default function BookDetailsPage() {
               <Image
                 src={book.coverImageUrl}
                 alt={book.title}
-                layout="fill"
-                objectFit="cover"
+                fill // Changed from layout="fill" to fill for Next 13+
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Example sizes, adjust as needed
+                style={{ objectFit: 'cover' }} // Replaces objectFit prop
                 data-ai-hint={book.dataAiHint || 'book cover detail'}
               />
             </div>
@@ -82,10 +100,7 @@ export default function BookDetailsPage() {
                 {book.longDescription || book.description}
               </p>
               <div className="flex space-x-3">
-                <Button size="lg" onClick={handleAddToCart} className="bg-primary hover:bg-primary/90">
-                  <ShoppingCart className="mr-2 h-5 w-5" />
-                  Add to Cart
-                </Button>
+                <AddToCartButton book={book} />
               </div>
             </CardContent>
           </div>

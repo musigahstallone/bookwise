@@ -12,12 +12,11 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Edit, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Edit, Trash2, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import type { Book } from '@/data/books';
-import { getAllBooksAdmin, deleteBookAdmin } from '@/lib/book-service';
 import { useToast } from '@/hooks/use-toast';
+import { handleDeleteBook } from '@/lib/actions/bookActions'; // Use Server Action
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,58 +28,70 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import Image from 'next/image';
-import PaginationControls from '@/components/books/PaginationControls'; // Reusing from shop
+import PaginationControls from '@/components/books/PaginationControls';
 
-const BOOKS_PER_PAGE = 10; // Admin can see more per page
+const BOOKS_PER_PAGE = 10;
 
-export default function BookDataTableClient() {
-  const [allBooks, setAllBooks] = useState<Book[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+interface BookDataTableClientProps {
+  initialBooks: Book[];
+}
+
+export default function BookDataTableClient({ initialBooks }: BookDataTableClientProps) {
+  const [books, setBooks] = useState<Book[]>(initialBooks);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [bookToDelete, setBookToDelete] = useState<Book | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const router = useRouter();
   const { toast } = useToast();
 
+  // Update local state if initialBooks prop changes (e.g., after seeding)
   useEffect(() => {
-    fetchBooks();
-  }, []);
+    setBooks(initialBooks);
+    // Reset to page 1 if book list changes significantly (e.g., after seeding)
+    // A more sophisticated check might be needed if live updates are frequent
+    const newTotalPages = Math.ceil(initialBooks.length / BOOKS_PER_PAGE);
+    if (currentPage > newTotalPages && newTotalPages > 0) {
+        setCurrentPage(newTotalPages);
+    } else if (newTotalPages === 0) {
+        setCurrentPage(1);
+    }
 
-  const fetchBooks = () => {
-    setIsLoading(true);
-    setAllBooks(getAllBooksAdmin());
-    setIsLoading(false);
-  };
+  }, [initialBooks, currentPage]);
+
 
   const handleDeleteConfirmation = (book: Book) => {
     setBookToDelete(book);
     setIsDeleteDialogOpen(true);
   };
 
-  const handleDeleteBook = () => {
+  const confirmDeleteBook = async () => {
     if (!bookToDelete) return;
-    try {
-      deleteBookAdmin(bookToDelete.id);
-      toast({ title: 'Success', description: `"${bookToDelete.title}" deleted successfully.` });
-      setAllBooks(prevBooks => prevBooks.filter(b => b.id !== bookToDelete!.id)); 
+    setIsDeleting(true);
+    toast({ title: 'Deleting Book...', description: `Attempting to delete "${bookToDelete.title}".` });
+    
+    const result = await handleDeleteBook(bookToDelete.id, bookToDelete.pdfUrl); // Pass pdfUrl
+
+    if (result.success) {
+      toast({ title: 'Success', description: result.message });
+      setBooks(prevBooks => prevBooks.filter(b => b.id !== bookToDelete.id));
       // Adjust current page if the last item on a page was deleted
-      const newTotalPages = Math.ceil((allBooks.length - 1) / BOOKS_PER_PAGE);
+      const newTotalPages = Math.ceil((books.length - 1) / BOOKS_PER_PAGE);
       if (currentPage > newTotalPages && newTotalPages > 0) {
         setCurrentPage(newTotalPages);
       } else if (newTotalPages === 0) {
         setCurrentPage(1);
       }
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to delete book.', variant: 'destructive' });
-    } finally {
-      setIsDeleteDialogOpen(false);
-      setBookToDelete(null);
+    } else {
+      toast({ title: 'Error', description: result.message, variant: 'destructive' });
     }
+    setIsDeleting(false);
+    setIsDeleteDialogOpen(false);
+    setBookToDelete(null);
   };
 
   const sortedBooks = useMemo(() => {
-    return [...allBooks].sort((a,b) => a.title.localeCompare(b.title));
-  }, [allBooks]);
+    return [...books].sort((a,b) => a.title.localeCompare(b.title));
+  }, [books]);
 
   const totalPages = Math.ceil(sortedBooks.length / BOOKS_PER_PAGE);
 
@@ -96,17 +107,18 @@ export default function BookDataTableClient() {
   }, []);
 
 
-  if (isLoading) {
-    return <p>Loading books...</p>;
+  if (!initialBooks && !books.length) { // Check if initialBooks was undefined/empty and local books empty
+    return <p>Loading books or Firebase not configured...</p>;
   }
 
-  if (sortedBooks.length === 0) {
-    return <p>No books found. <Link href="/admin/books/add" className="text-primary hover:underline">Add a new book</Link>.</p>;
+
+  if (books.length === 0) {
+    return <p>No books found in Firestore. <Link href="/admin/books/add" className="text-primary hover:underline">Add a new book</Link>.</p>;
   }
 
   return (
     <>
-      <div className="rounded-md border shadow-sm overflow-x-auto"> {/* Added overflow-x-auto for mobile table */}
+      <div className="rounded-md border shadow-sm overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -142,7 +154,7 @@ export default function BookDataTableClient() {
                 <TableCell className="text-center">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
+                      <Button variant="ghost" className="h-8 w-8 p-0" disabled={isDeleting}>
                         <span className="sr-only">Open menu</span>
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
@@ -154,7 +166,8 @@ export default function BookDataTableClient() {
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleDeleteConfirmation(book)} className="flex items-center text-destructive hover:!text-destructive cursor-pointer">
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                        {isDeleting && bookToDelete?.id === book.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                         Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -178,13 +191,15 @@ export default function BookDataTableClient() {
             <AlertDialogHeader>
               <AlertDialogTitle>Are you sure?</AlertDialogTitle>
               <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the book
-                "{bookToDelete.title}".
+                This action will permanently delete the book "{bookToDelete.title}" from Firestore
+                {bookToDelete.pdfUrl && bookToDelete.pdfUrl.includes('firebasestorage.googleapis.com') ? ' and its associated PDF from Firebase Storage.' : '.'}
+                This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDeleteBook} className="bg-destructive hover:bg-destructive/90">
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteBook} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>
+                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Delete
               </AlertDialogAction>
             </AlertDialogFooter>

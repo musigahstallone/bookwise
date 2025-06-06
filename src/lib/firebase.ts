@@ -2,6 +2,7 @@
 // src/lib/firebase.ts
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getStorage } from 'firebase/storage';
+import { getFirestore } from 'firebase/firestore'; // Added Firestore
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -22,5 +23,6 @@ if (!getApps().length) {
 }
 
 const storage = getStorage(app);
+const db = getFirestore(app); // Initialize Firestore
 
-export { app, storage };
+export { app, storage, db };

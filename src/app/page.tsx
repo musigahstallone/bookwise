@@ -5,11 +5,25 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import BookCard from '@/components/books/BookCard';
-import { books, type Book } from '@/data/books';
-import { Library, Zap, CreditCard, BrainCircuit, Facebook, Instagram, Twitter as XIcon, ExternalLink } from 'lucide-react';
+import type { Book } from '@/data/books';
+import { getAllBooksFromDb } from '@/lib/book-service-firebase'; // Updated
+import { Library, Zap, CreditCard, BrainCircuit, Facebook, Instagram, Twitter as XIcon, ExternalLink, AlertTriangle } from 'lucide-react';
 
-export default function LandingPage() {
-  const previewBooks: Book[] = books.slice(0, 4);
+export default async function LandingPage() {
+  let previewBooks: Book[] = [];
+  let fetchError: string | null = null;
+  const firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (firebaseConfigured) {
+    try {
+      const allBooks = await getAllBooksFromDb();
+      previewBooks = allBooks.slice(0, 4); // Get first 4 for preview
+    } catch (error) {
+      console.error("Error fetching books for landing page:", error);
+      fetchError = error instanceof Error ? error.message : "An unknown error occurred while fetching books.";
+    }
+  }
+
 
   const features = [
     {
@@ -132,11 +146,28 @@ export default function LandingPage() {
             <h2 className="text-3xl font-headline font-semibold text-center mb-12 text-foreground">
               Explore Our Latest Arrivals
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {previewBooks.map((book) => (
-                <BookCard key={book.id} book={book} />
-              ))}
-            </div>
+            {!firebaseConfigured && (
+                <div className="text-center p-4 mb-6 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
+                    <p className="font-bold flex items-center justify-center"><AlertTriangle className="mr-2 h-5 w-5" /> Firebase Not Configured</p>
+                    <p>Book previews cannot be loaded. Please check your <code>.env.local</code> settings.</p>
+                </div>
+            )}
+            {firebaseConfigured && fetchError && (
+                <div className="text-center p-4 mb-6 bg-destructive/10 border-l-4 border-destructive text-destructive-foreground rounded-md">
+                    <p className="font-bold flex items-center justify-center"><AlertTriangle className="mr-2 h-5 w-5" /> Error Loading Books</p>
+                    <p>{fetchError}</p>
+                </div>
+            )}
+            {firebaseConfigured && !fetchError && previewBooks.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {previewBooks.map((book) => (
+                  <BookCard key={book.id} book={book} />
+                ))}
+              </div>
+            )}
+            {firebaseConfigured && !fetchError && previewBooks.length === 0 && (
+                 <p className="text-center text-muted-foreground">No books to display currently. Try seeding the database in the admin panel.</p>
+            )}
             <div className="text-center mt-12">
               <Button asChild size="lg" variant="outline">
                 <Link href="/shop">See Full Catalog <ExternalLink className="ml-2 h-5 w-5" /></Link>

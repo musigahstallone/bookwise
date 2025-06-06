@@ -1,75 +1,54 @@
 
-'use client'; // Mark as client component if it's going to be used by client components directly for stateful operations
+// src/lib/book-service.ts
+// This file is now mostly DEPRECATED for runtime application use.
+// Its primary purpose is to serve as a source for the initial book data structure
+// and for the `books` array which can be used for seeding the Firestore database.
+// For actual CRUD operations, use `src/lib/book-service-firebase.ts` and Server Actions.
 
 import { books as allBooksData, type Book } from '@/data/books';
 
-// Make a mutable copy for admin operations for this session
-// This is a simplified approach for a prototype. In a real app, this would be a backend API.
-let mutableBooks: Book[] = JSON.parse(JSON.stringify(allBooksData));
+// The mutableBooks array is no longer the source of truth for the application.
+// Admin operations will directly interact with Firebase Firestore.
+// This in-memory manipulation is now only relevant if you were to run parts of the app
+// without Firebase or for specific isolated testing that doesn't involve persistence.
 
-// Function to generate a new unique ID (simple implementation)
-const generateId = () => String(Date.now() + Math.floor(Math.random() * 1000));
+let mutableBooks_deprecated: Book[] = JSON.parse(JSON.stringify(allBooksData));
 
-export const getAllBooksAdmin = (): Book[] => {
-  return mutableBooks;
+export const getAllBooksAdmin_deprecated = (): Book[] => {
+  console.warn("Deprecated: getAllBooksAdmin_deprecated is called. Data should be fetched from Firestore.");
+  return mutableBooks_deprecated;
 };
 
-export const getBookByIdAdmin = (id: string): Book | undefined => {
-  return mutableBooks.find(book => book.id === id);
+export const getBookByIdAdmin_deprecated = (id: string): Book | undefined => {
+  console.warn("Deprecated: getBookByIdAdmin_deprecated is called. Data should be fetched from Firestore.");
+  return mutableBooks_deprecated.find(book => book.id === id);
 };
 
-export const addBookAdmin = (bookData: Omit<Book, 'id'>): Book => {
-  const newBook: Book = { ...bookData, id: generateId() };
-  mutableBooks.unshift(newBook); // Add to the beginning to see it easily
-  // Update the original books array as well to reflect on the main site for demo purposes
-  // This is a hack for the prototype.
-  const originalBookIndex = allBooksData.findIndex(b => b.id === newBook.id);
-  if (originalBookIndex === -1) {
-    allBooksData.unshift(JSON.parse(JSON.stringify(newBook)));
-  }
+export const addBookAdmin_deprecated = (bookData: Omit<Book, 'id'>): Book => {
+  console.warn("Deprecated: addBookAdmin_deprecated is called. Data should be added to Firestore via Server Action.");
+  const newBook: Book = { ...bookData, id: String(Date.now() + Math.floor(Math.random() * 1000)) };
+  mutableBooks_deprecated.unshift(newBook);
   return newBook;
 };
 
-export const updateBookAdmin = (id: string, updates: Partial<Omit<Book, 'id'>>): Book | undefined => {
-  const bookIndex = mutableBooks.findIndex(book => book.id === id);
+export const updateBookAdmin_deprecated = (id: string, updates: Partial<Omit<Book, 'id'>>): Book | undefined => {
+  console.warn("Deprecated: updateBookAdmin_deprecated is called. Data should be updated in Firestore via Server Action.");
+  const bookIndex = mutableBooks_deprecated.findIndex(book => book.id === id);
   if (bookIndex === -1) return undefined;
   
-  mutableBooks[bookIndex] = { ...mutableBooks[bookIndex], ...updates };
-
-  // Update the original books array as well
-  const originalBookIndexAll = allBooksData.findIndex(b => b.id === id);
-  if (originalBookIndexAll !== -1) {
-    allBooksData[originalBookIndexAll] = { ...allBooksData[originalBookIndexAll], ...updates };
-  }
-  return mutableBooks[bookIndex];
+  mutableBooks_deprecated[bookIndex] = { ...mutableBooks_deprecated[bookIndex], ...updates };
+  return mutableBooks_deprecated[bookIndex];
 };
 
-export const deleteBookAdmin = (id: string): boolean => {
-  const bookIndex = mutableBooks.findIndex(book => book.id === id);
+export const deleteBookAdmin_deprecated = (id: string): boolean => {
+  console.warn("Deprecated: deleteBookAdmin_deprecated is called. Data should be deleted from Firestore via Server Action.");
+  const bookIndex = mutableBooks_deprecated.findIndex(book => book.id === id);
   if (bookIndex === -1) return false;
   
-  mutableBooks.splice(bookIndex, 1);
-
-  // Update the original books array as well
-  const originalBookIndexAll = allBooksData.findIndex(b => b.id === id);
-  if (originalBookIndexAll !== -1) {
-    allBooksData.splice(originalBookIndexAll, 1);
-  }
+  mutableBooks_deprecated.splice(bookIndex, 1);
   return true;
 };
 
-// This function could be called if we had a way to "publish" changes,
-// but for now, mutations are in-memory for the session.
-export const syncDataToSource = () => {
-    // In a real scenario, this might try to write back to a file or API.
-    // For this prototype, we're directly mutating allBooksData for shared visibility.
-    console.warn("Data sync in prototype relies on direct mutation of imported 'allBooksData'. Changes are session-based.");
-};
-
-// Helper to reset to original data if needed for testing
-export const resetBooksAdmin = () => {
-    mutableBooks = JSON.parse(JSON.stringify(allBooksData));
-     // This won't reset allBooksData if it was mutated directly.
-     // To truly reset allBooksData, we'd need to re-import or have initial copy.
-     // For now, this primarily resets the admin's 'mutableBooks'.
-};
+// The `books` export from `src/data/books.ts` should be the primary source for seeding.
+// This file's direct manipulation of `allBooksData` is removed to avoid confusion.
+// The application should rely on Firestore as the single source of truth post-seeding.

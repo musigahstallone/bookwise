@@ -1,26 +1,23 @@
 
-'use client'; // Add this directive
-
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BookCopy, Users, BarChart3, AlertTriangle, Info } from 'lucide-react';
+import { BookCopy, Users, BarChart3, AlertTriangle, Info, Database } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { getAllBooksAdmin } from '@/lib/book-service'; // To get book count
-import { useEffect, useState } from 'react'; // Import hooks for client component
+import { countBooksInDb } from '@/lib/book-service-firebase'; // Updated import
+import SeedDatabaseButton from '@/components/admin/SeedDatabaseButton'; // New component for the button
 
-export default function AdminDashboardPage() {
-  // State to hold the book count, as direct calls in render body are for server components
-  const [bookCount, setBookCount] = useState(0);
+export default async function AdminDashboardPage() {
+  let bookCount = 0;
+  let firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 
-  useEffect(() => {
-    // Fetch book count on the client side
-    setBookCount(getAllBooksAdmin().length);
-  }, []);
+  if (firebaseConfigured) {
+    bookCount = await countBooksInDb();
+  }
 
   const stats = [
-    { title: 'Total Books in Catalog', value: bookCount.toString(), icon: BookCopy, href: '/admin/books', description: 'Manage current book catalog' },
-    { title: 'Total Registered Users', value: 'N/A', icon: Users, description: 'Requires Firebase Authentication integration' },
-    { title: 'Sales Overview', value: 'N/A', icon: BarChart3, description: 'Requires Firebase Firestore for order data' },
+    { title: 'Total Books in Catalog', value: firebaseConfigured ? bookCount.toString() : 'N/A (Firebase not configured)', icon: BookCopy, href: '/admin/books', description: 'Manage current book catalog' },
+    { title: 'Total Registered Users', value: 'N/A', icon: Users, description: 'Requires Firebase Authentication & Firestore' },
+    { title: 'Sales Overview', value: 'N/A', icon: BarChart3, description: 'Requires Firestore for order data' },
   ];
 
   return (
@@ -28,6 +25,22 @@ export default function AdminDashboardPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-3xl font-headline font-bold text-primary">Admin Dashboard</h1>
       </div>
+
+      {!firebaseConfigured && (
+        <Card className="shadow-lg bg-destructive/10 border-destructive">
+          <CardHeader>
+            <CardTitle className="text-destructive flex items-center">
+              <AlertTriangle className="mr-2 h-5 w-5" /> Firebase Not Configured
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-destructive-foreground">
+              Firebase Project ID is not set in your environment variables. Please configure <code>.env.local</code> with your Firebase project details.
+              Features like book management and PDF uploads will not work correctly until Firebase is configured. Refer to <code>README.md</code>.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {stats.map((stat) => (
@@ -39,7 +52,7 @@ export default function AdminDashboardPage() {
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
               {stat.description && <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>}
-              {stat.href && stat.value !== 'N/A' && (
+              {stat.href && stat.value !== 'N/A' && firebaseConfigured && (
                 <Button variant="link" asChild className="px-0 pt-2">
                   <Link href={stat.href}>View Details</Link>
                 </Button>
@@ -48,6 +61,20 @@ export default function AdminDashboardPage() {
           </Card>
         ))}
       </div>
+      
+      {firebaseConfigured && (
+        <Card className="shadow-lg">
+            <CardHeader>
+                <CardTitle className="flex items-center">
+                    <Database className="mr-2 h-5 w-5"/> Database Actions
+                </CardTitle>
+                <CardDescription>Perform actions like seeding the database from mock data.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <SeedDatabaseButton />
+            </CardContent>
+        </Card>
+      )}
 
       <Card className="shadow-lg">
         <CardHeader>
@@ -55,10 +82,10 @@ export default function AdminDashboardPage() {
           <CardDescription>Common administrative tasks for the book catalog.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-4">
-          <Button asChild>
+          <Button asChild disabled={!firebaseConfigured}>
             <Link href="/admin/books/add">Add New Book</Link>
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild disabled={!firebaseConfigured}>
             <Link href="/admin/books">Manage Books</Link>
           </Button>
         </CardContent>
@@ -75,11 +102,10 @@ export default function AdminDashboardPage() {
           - <strong className="text-green-700">PDF Files:</strong> Uploaded PDF files are persisted in Firebase Storage.
         </p>
         <p>
-          - <strong className="text-orange-700">Book Metadata:</strong> Information about books (title, author, description, category, price, and the link to the PDF in Firebase Storage) is currently managed in-memory for this session.
-          Modifications (add, edit, delete) made via this admin panel will **not persist** if the application server restarts or is rebuilt.
+          - <strong className="text-orange-700">Book Metadata:</strong> Book information (title, author, etc.) is now managed in Firebase Firestore and will persist.
         </p>
         <p className="mt-2">
-          For full persistence of all book data, integration with a database like Firebase Firestore for book metadata is required.
+          The "Seed Database" action will populate Firestore with data from `src/data/books.ts`. This uses the book's `id` from the mock data as the document ID in Firestore.
         </p>
       </div>
     </div>
