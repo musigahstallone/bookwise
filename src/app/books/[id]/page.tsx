@@ -1,3 +1,4 @@
+
 import { getBookById, type Book } from '@/data/books';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -5,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import {notFound} from 'next/navigation';
-import { ShoppingCart, Download } from 'lucide-react';
+import { ShoppingCart, Download, ArrowLeft } from 'lucide-react';
 import BuyButtonClient from '@/components/books/BuyButtonClient';
 
 interface BookDetailsPageProps {
@@ -21,6 +22,12 @@ export default function BookDetailsPage({ params }: BookDetailsPageProps) {
 
   return (
     <div className="max-w-4xl mx-auto">
+      <Button variant="outline" asChild className="mb-6 group">
+        <Link href="/shop">
+          <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" />
+          Back to all books
+        </Link>
+      </Button>
       <Card className="overflow-hidden shadow-xl">
         <div className="md:flex">
           <div className="md:w-1/3 p-4">
@@ -51,9 +58,6 @@ export default function BookDetailsPage({ params }: BookDetailsPageProps) {
           </div>
         </div>
       </Card>
-      <Button variant="link" asChild className="mt-8">
-        <Link href="/">← Back to all books</Link>
-      </Button>
     </div>
   );
 }
@@ -64,3 +68,5 @@ export async function generateStaticParams() {
     id: book.id,
   }));
 }
+
+    

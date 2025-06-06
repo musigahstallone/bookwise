@@ -1,5 +1,6 @@
+
 import Link from 'next/link';
-import { BookOpen, Sparkles, ShoppingCart } from 'lucide-react';
+import { BookOpen, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const Header = () => {
@@ -10,24 +11,23 @@ const Header = () => {
           <BookOpen className="h-8 w-8" />
           <h1 className="text-3xl font-headline font-bold">BookWise</h1>
         </Link>
-        <nav className="flex items-center space-x-4">
-          <Button variant="ghost" asChild>
+        <nav className="flex items-center space-x-2 md:space-x-4">
+          <Button variant="ghost" asChild className="text-sm md:text-base px-2 md:px-3">
             <Link href="/" className="hover:text-accent-foreground/80 transition-colors">
               Home
             </Link>
           </Button>
-          <Button variant="ghost" asChild>
-            <Link href="/recommendations" className="hover:text-accent-foreground/80 transition-colors flex items-center">
-              <Sparkles className="h-5 w-5 mr-1" />
-              AI Recommender
+          <Button variant="ghost" asChild className="text-sm md:text-base px-2 md:px-3">
+            <Link href="/shop" className="hover:text-accent-foreground/80 transition-colors">
+              Browse Books
             </Link>
           </Button>
-          {/* Placeholder for Cart/My Books */}
-          {/* <Button variant="ghost" asChild>
-            <Link href="/cart" className="hover:text-accent-foreground/80 transition-colors">
-              <ShoppingCart className="h-5 w-5" />
+          <Button variant="ghost" asChild className="text-sm md:text-base px-2 md:px-3">
+            <Link href="/recommendations" className="hover:text-accent-foreground/80 transition-colors flex items-center">
+              <Sparkles className="h-5 w-5 mr-1 hidden sm:inline-block" />
+              AI Advisor
             </Link>
-          </Button> */}
+          </Button>
         </nav>
       </div>
     </header>
@@ -35,3 +35,5 @@ const Header = () => {
 };
 
 export default Header;
+
+    

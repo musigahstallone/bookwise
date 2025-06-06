@@ -1,3 +1,4 @@
+
 import { getBookById } from '@/data/books';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -34,7 +35,7 @@ export default function PurchaseSuccessPage({ params }: PurchaseSuccessPageProps
       </Button>
 
       <Button variant="link" asChild className="mt-10">
-        <Link href="/">Continue Shopping</Link>
+        <Link href="/shop">Continue Shopping</Link>
       </Button>
     </div>
   );
@@ -46,3 +47,5 @@ export async function generateStaticParams() {
     bookId: book.id,
   }));
 }
+
+    
