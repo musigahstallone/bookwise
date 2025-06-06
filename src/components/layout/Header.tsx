@@ -18,13 +18,13 @@ import {
 } from "@/components/ui/select";
 import { useRegion } from '@/contexts/RegionContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation'; // useRouter needs 'use client'
+import { useRouter } from 'next/navigation'; 
 
 
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/shop", label: "Browse Books" },
-  { href: "/recommendations", label: "AI Advisor", icon: <Sparkles className="h-5 w-5 mr-1" /> },
+  { href: "/recommendations", label: "AI Advisor", icon: <Sparkles className="h-5 w-5 mr-1" />, desktopOnly: false, mobileOnly: true }, // Keep for mobile sheet
 ];
 
 const Header = () => {
@@ -60,11 +60,14 @@ const Header = () => {
 
       return (
         <div className={cn("flex items-center", isMobile ? "flex-col space-y-2 items-start w-full" : "space-x-2")}>
-          <span className={cn("text-sm text-muted-foreground hidden md:inline truncate max-w-[150px]", isMobile && "block text-base mb-1")}>
-             {isAdmin && <Badge variant="destructive" className="mr-2">Admin</Badge>}
-             {userName || userEmail}
-          </span>
-           <UserCircle className={cn("h-6 w-6 text-primary md:hidden", isMobile && "mr-2 h-5 w-5 inline-block")} />
+          {/* User name/email display, only for mobile sheet */}
+          {isMobile && (
+            <div className="flex items-center mb-1 text-base">
+                <UserCircle className="mr-2 h-5 w-5 text-primary" />
+                <span className="truncate max-w-[180px]">{userName || userEmail}</span>
+                {isAdmin && <Badge variant="destructive" className="ml-2 text-xs">Admin</Badge>}
+            </div>
+          )}
           <Button variant={isMobile ? "outline" : "ghost"} size={isMobile ? "default" : "sm"} onClick={async () => {await logout(); setIsMobileMenuOpen(false); router.push('/'); router.refresh();}} className={cn(isMobile && "w-full justify-start")}>
             <LogOut className="mr-2 h-4 w-4" /> Logout
           </Button>
@@ -102,15 +105,15 @@ const Header = () => {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center space-x-1">
-          {navLinks.map((link) => (
+          {navLinks.filter(link => !link.mobileOnly).map((link) => ( // Filter out mobileOnly links for desktop
             <Button variant="ghost" asChild key={link.href} className={linkClasses}>
               <Link href={link.href} className="flex items-center">
-                {link.icon && <span className="hidden sm:inline-block">{link.icon}</span>}
+                {link.icon && !link.mobileOnly && <span className="hidden sm:inline-block">{link.icon}</span>}
                 {link.label}
               </Link>
             </Button>
           ))}
-          {currentUser && ( // Only show cart if user is logged in
+          {currentUser && ( 
             <Button variant="ghost" asChild className={cn(linkClasses, "relative")}>
               <Link href="/cart" className="flex items-center">
                 <ShoppingCart className="h-5 w-5 mr-1" />
@@ -123,31 +126,17 @@ const Header = () => {
               </Link>
             </Button>
           )}
-          <div className="ml-2">
-            <Select value={selectedRegion.code} onValueChange={setSelectedRegionByCode}>
-              <SelectTrigger className="w-[180px] text-sm h-9">
-                <Globe className="h-4 w-4 mr-2 opacity-70" />
-                <SelectValue placeholder="Select Region" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableRegions.map(region => (
-                  <SelectItem key={region.code} value={region.code}>
-                    {region.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Region Selector REMOVED from desktop header */}
           <div className="ml-2 pl-2 border-l">
-            {renderAuthSection()}
+            {renderAuthSection()} {/* User name display is handled inside renderAuthSection for mobile only */}
           </div>
         </nav>
 
         {/* Mobile Navigation */}
         <div className="md:hidden flex items-center space-x-2">
-          {currentUser && ( // Only show cart if user is logged in
+          {currentUser && ( 
             <Button variant="ghost" size="icon" asChild className={cn(iconButtonClasses, "relative")}>
-              <Link href="/cart">
+              <Link href="/cart" onClick={() => setIsMobileMenuOpen(false)}>
                 <ShoppingCart className="h-6 w-6" />
                 {itemCount > 0 && (
                   <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
@@ -177,15 +166,9 @@ const Header = () => {
                   </SheetClose>
               </SheetHeader>
               <nav className="flex flex-col space-y-3">
-                {currentUser && currentUser.firestoreData && ( // Show user info if logged in and data available
-                  <div className="px-3 py-2 border-b mb-2">
-                      <p className="text-sm font-medium text-foreground truncate">{currentUser.firestoreData.name || currentUser.email}</p>
-                      <div className="text-xs text-muted-foreground">
-                        {currentUser.email} {currentUser.firestoreData.role === 'admin' && <Badge variant="destructive" className="ml-1">Admin</Badge>}
-                      </div>
-                  </div>
-                )}
-                {navLinks.map((link) => (
+                {/* User info display removed from here; handled by renderAuthSection(true) */}
+                
+                {navLinks.map((link) => ( // All navLinks, including AI Advisor, shown in mobile sheet
                   <SheetClose asChild key={link.href}>
                     <Link
                       href={link.href}
@@ -197,7 +180,7 @@ const Header = () => {
                     </Link>
                   </SheetClose>
                 ))}
-                {currentUser && ( // Only show cart link if user is logged in
+                {currentUser && ( 
                   <SheetClose asChild>
                     <Link
                       href="/cart"
@@ -243,5 +226,3 @@ const Header = () => {
 };
 
 export default Header;
-
-    
