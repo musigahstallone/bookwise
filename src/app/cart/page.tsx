@@ -7,16 +7,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Trash2, ShoppingBag, XCircle } from 'lucide-react';
+import { Trash2, ShoppingBag, XCircle, Loader2 } from 'lucide-react'; // Added Loader2
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
+import { useState } from 'react'; // Added useState
 
 export default function CartPage() {
   const { cartItems, removeFromCart, clearCart, getCartTotal, getItemCount } = useCart();
   const router = useRouter();
   const { toast } = useToast();
+  const [isCheckingOut, setIsCheckingOut] = useState(false); // State for loading
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (cartItems.length === 0) {
       toast({
         title: "Your cart is empty!",
@@ -25,20 +27,42 @@ export default function CartPage() {
       });
       return;
     }
-    // In a real app, this would redirect to a checkout page.
-    // For now, we simulate a purchase and clear the cart, then redirect to a generic success page.
-    // We'll use the first book's ID for the purchase success page for simplicity in this mock.
-    const firstBookId = cartItems[0].id;
+
+    setIsCheckingOut(true);
+    toast({
+      title: "Processing your order...",
+      description: "Please wait a moment.",
+    });
+
+    // Simulate payment processing delay
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Store items in sessionStorage before clearing cart
+    try {
+        sessionStorage.setItem('lastPurchasedItems', JSON.stringify(cartItems));
+    } catch (error) {
+        console.error("Error saving to sessionStorage:", error);
+        toast({
+            title: "Checkout Error",
+            description: "Could not save your order details. Please try again.",
+            variant: "destructive",
+        });
+        setIsCheckingOut(false);
+        return;
+    }
     
+    clearCart(true); // Clear cart silently
+
     toast({
       title: "Mock Checkout Successful!",
-      description: "Thank you for your 'purchase'. Your cart has been cleared.",
+      description: "Redirecting to your order summary...",
     });
-    clearCart();
-    router.push(`/purchase-success/${firstBookId}`); // Navigate to a success page
+    
+    router.push(`/order-summary`);
+    // setIsCheckingOut will effectively be false on new page load, or reset if user navigates back.
   };
 
-  if (cartItems.length === 0) {
+  if (cartItems.length === 0 && !isCheckingOut) { // Added !isCheckingOut to prevent flash of empty message
     return (
       <div className="text-center py-20">
         <ShoppingBag className="mx-auto h-24 w-24 text-muted-foreground mb-6" />
@@ -58,7 +82,7 @@ export default function CartPage() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-headline font-bold text-primary">Your Shopping Cart</h1>
         {cartItems.length > 0 && (
-          <Button variant="outline" onClick={clearCart} className="text-destructive hover:text-destructive border-destructive/50 hover:bg-destructive/10">
+          <Button variant="outline" onClick={() => clearCart()} className="text-destructive hover:text-destructive border-destructive/50 hover:bg-destructive/10" disabled={isCheckingOut}>
             <XCircle className="mr-2 h-4 w-4" /> Clear Cart
           </Button>
         )}
@@ -80,7 +104,7 @@ export default function CartPage() {
                 <p className="text-xs text-muted-foreground mt-1">Quantity: 1 (PDF Download)</p>
               </div>
               <div className="flex items-center space-x-3 mt-4 sm:mt-0 sm:ml-auto flex-shrink-0">
-                <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.id)} className="text-destructive hover:text-destructive">
+                <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.id)} className="text-destructive hover:text-destructive" disabled={isCheckingOut}>
                   <Trash2 className="h-5 w-5" />
                   <span className="sr-only">Remove item</span>
                 </Button>
@@ -108,8 +132,19 @@ export default function CartPage() {
                 <span>Total</span>
                 <span>${getCartTotal().toFixed(2)}</span>
               </div>
-              <Button size="lg" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground mt-4" onClick={handleCheckout}>
-                Proceed to Mock Checkout
+              <Button 
+                size="lg" 
+                className="w-full bg-accent hover:bg-accent/90 text-accent-foreground mt-4" 
+                onClick={handleCheckout}
+                disabled={isCheckingOut || cartItems.length === 0}
+              >
+                {isCheckingOut ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Processing...
+                  </>
+                ) : (
+                  'Proceed to Mock Checkout'
+                )}
               </Button>
             </CardContent>
           </Card>

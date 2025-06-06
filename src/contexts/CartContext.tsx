@@ -13,9 +13,9 @@ interface CartContextType {
   cartItems: CartItem[];
   addToCart: (book: Book) => void;
   removeFromCart: (bookId: string) => void;
-  clearCart: () => void;
+  clearCart: (silent?: boolean) => void; // Added optional silent parameter
   getCartTotal: () => number;
-  getItemCount: () => number; // This will return the number of unique items
+  getItemCount: () => number;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -27,7 +27,6 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const storedCartItems = localStorage.getItem('bookwiseCart');
     if (storedCartItems) {
-      // Ensure stored items also conform to quantity: 1
       const parsedItems: CartItem[] = JSON.parse(storedCartItems);
       setCartItems(parsedItems.map(item => ({ ...item, quantity: 1 })));
     }
@@ -45,7 +44,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           title: `${book.title} is already in your cart.`,
           description: 'You can purchase one copy per PDF book.',
         });
-        return prevItems; // Do not add again or change quantity
+        return prevItems;
       } else {
         toast({
           title: 'Added to Cart!',
@@ -70,23 +69,21 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  // updateQuantity is removed as quantity is fixed at 1 for PDFs
-
-  const clearCart = () => {
+  const clearCart = (silent: boolean = false) => {
     setCartItems([]);
-    toast({
-      title: 'Cart Cleared',
-      description: 'All items have been removed from your cart.',
-    });
+    if (!silent) {
+      toast({
+        title: 'Cart Cleared',
+        description: 'All items have been removed from your cart.',
+      });
+    }
   };
 
   const getCartTotal = () => {
-    // Since quantity is always 1, sum of prices
     return cartItems.reduce((total, item) => total + item.price, 0);
   };
 
   const getItemCount = () => {
-    // Returns the number of unique books in the cart
     return cartItems.length;
   };
 
