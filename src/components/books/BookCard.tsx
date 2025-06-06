@@ -1,8 +1,10 @@
+
 import type { Book } from '@/data/books';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge'; // Import Badge
 import { ArrowRight } from 'lucide-react';
 
 interface BookCardProps {
@@ -10,9 +12,12 @@ interface BookCardProps {
 }
 
 const BookCard: React.FC<BookCardProps> = ({ book }) => {
+  const currentYear = new Date().getFullYear();
+  const isNew = book.publishedYear >= currentYear - 1; // Consider books from last year and this year as new
+
   return (
     <Card className="flex flex-col overflow-hidden h-full shadow-lg hover:shadow-xl transition-shadow duration-300">
-      <CardHeader className="p-0">
+      <CardHeader className="p-0 relative"> {/* Added relative positioning */}
         <div className="aspect-[2/3] w-full relative">
           <Image
             src={book.coverImageUrl}
@@ -21,6 +26,11 @@ const BookCard: React.FC<BookCardProps> = ({ book }) => {
             objectFit="cover"
             data-ai-hint={book.dataAiHint || 'book cover'}
           />
+           {isNew && (
+            <Badge variant="default" className="absolute top-2 right-2 bg-primary text-primary-foreground shadow-md">
+              NEW!
+            </Badge>
+          )}
         </div>
       </CardHeader>
       <CardContent className="p-4 flex-grow">

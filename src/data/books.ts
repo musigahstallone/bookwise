@@ -3,13 +3,14 @@ export interface Book {
   id: string;
   title: string;
   author: string;
-  category: string; // Added category
+  category: string;
   description: string;
   longDescription?: string;
   price: number;
   coverImageUrl: string;
   pdfUrl: string;
   dataAiHint?: string;
+  publishedYear: number; // Added publishedYear
 }
 
 export const books: Book[] = [
@@ -24,6 +25,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'library fantasy',
+    publishedYear: 2020,
   },
   {
     id: '2',
@@ -36,6 +38,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'space science',
+    publishedYear: 2021,
   },
   {
     id: '3',
@@ -48,6 +51,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'robot future',
+    publishedYear: 2021,
   },
   {
     id: '4',
@@ -60,6 +64,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'family drama',
+    publishedYear: 2020,
   },
   {
     id: '5',
@@ -72,6 +77,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'selfhelp productivity',
+    publishedYear: 2018,
   },
   {
     id: '6',
@@ -84,6 +90,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'memoir education',
+    publishedYear: 2018,
   },
   {
     id: '7',
@@ -96,6 +103,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'mystery nature',
+    publishedYear: 2018,
   },
   {
     id: '8',
@@ -108,6 +116,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'philosophy destiny',
+    publishedYear: 1988,
   },
   {
     id: '9',
@@ -120,6 +129,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'spiritual selfhelp',
+    publishedYear: 1997,
   },
   {
     id: '10',
@@ -132,6 +142,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'biography inspiration',
+    publishedYear: 2018,
   },
   {
     id: '11',
@@ -144,6 +155,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'history anthropology',
+    publishedYear: 2011,
   },
   {
     id: '12',
@@ -156,6 +168,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'mindfulness spirituality',
+    publishedYear: 1997,
   },
   {
     id: '13',
@@ -168,6 +181,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'sci-fi epic',
+    publishedYear: 1965,
   },
   {
     id: '14',
@@ -180,6 +194,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'dystopia politics',
+    publishedYear: 1949,
   },
   {
     id: '15',
@@ -192,6 +207,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'classic racism law',
+    publishedYear: 1960,
   },
   {
     id: '16',
@@ -204,6 +220,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'thriller psychology',
+    publishedYear: 2019,
   },
   {
     id: '17',
@@ -216,6 +233,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'motivation endurance',
+    publishedYear: 2018,
   },
   {
     id: '18',
@@ -228,6 +246,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'finance investment',
+    publishedYear: 1997,
   },
   {
     id: '19',
@@ -240,6 +259,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'mindfulness peace',
+    publishedYear: 2020,
   },
   {
     id: '20',
@@ -252,6 +272,7 @@ export const books: Book[] = [
     coverImageUrl: 'https://placehold.co/300x450.png',
     pdfUrl: '/pdfs/placeholder-book.pdf',
     dataAiHint: 'selfhelp attitude',
+    publishedYear: 2024, // Example of a new book
   },
 ];
 

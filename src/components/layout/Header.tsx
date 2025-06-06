@@ -1,39 +1,81 @@
 
+'use client'; // Required for useState and Sheet component
+
 import Link from 'next/link';
-import { BookOpen, Sparkles } from 'lucide-react';
+import { BookOpen, Sparkles, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
+import { useState } from 'react';
+
+const navLinks = [
+  { href: "/", label: "Home" },
+  { href: "/shop", label: "Browse Books" },
+  { href: "/recommendations", label: "AI Advisor", icon: <Sparkles className="h-5 w-5 mr-1" /> },
+];
 
 const Header = () => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   return (
     <header className="bg-primary text-primary-foreground shadow-md sticky top-0 z-50">
       <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-        <Link href="/" className="flex items-center space-x-2">
+        <Link href="/" className="flex items-center space-x-2" onClick={() => setIsMobileMenuOpen(false)}>
           <BookOpen className="h-8 w-8" />
           <h1 className="text-3xl font-headline font-bold">BookWise</h1>
         </Link>
-        <nav className="flex items-center space-x-2 md:space-x-4">
-          <Button variant="ghost" asChild className="text-sm md:text-base px-2 md:px-3">
-            <Link href="/" className="hover:text-accent-foreground/80 transition-colors">
-              Home
-            </Link>
-          </Button>
-          <Button variant="ghost" asChild className="text-sm md:text-base px-2 md:px-3">
-            <Link href="/shop" className="hover:text-accent-foreground/80 transition-colors">
-              Browse Books
-            </Link>
-          </Button>
-          <Button variant="ghost" asChild className="text-sm md:text-base px-2 md:px-3">
-            <Link href="/recommendations" className="hover:text-accent-foreground/80 transition-colors flex items-center">
-              <Sparkles className="h-5 w-5 mr-1 hidden sm:inline-block" />
-              AI Advisor
-            </Link>
-          </Button>
+
+        {/* Desktop Navigation */}
+        <nav className="hidden md:flex items-center space-x-1">
+          {navLinks.map((link) => (
+            <Button variant="ghost" asChild key={link.href} className="text-base px-3 py-2">
+              <Link href={link.href} className="hover:text-accent-foreground/80 transition-colors flex items-center">
+                {link.icon && <span className="hidden sm:inline-block">{link.icon}</span>}
+                {link.label}
+              </Link>
+            </Button>
+          ))}
         </nav>
+
+        {/* Mobile Navigation */}
+        <div className="md:hidden">
+          <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="h-7 w-7" />
+                <span className="sr-only">Open menu</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[280px] sm:w-[320px] bg-card">
+              <SheetHeader className="mb-6 border-b pb-4">
+                <SheetTitle className="flex items-center text-primary">
+                  <BookOpen className="h-7 w-7 mr-2" />
+                  <span className="text-2xl font-headline">BookWise</span>
+                </SheetTitle>
+                 <SheetClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+                    <X className="h-5 w-5" />
+                    <span className="sr-only">Close</span>
+                  </SheetClose>
+              </SheetHeader>
+              <nav className="flex flex-col space-y-3">
+                {navLinks.map((link) => (
+                  <SheetClose asChild key={link.href}>
+                    <Link
+                      href={link.href}
+                      className="flex items-center py-3 px-3 text-lg text-foreground hover:bg-muted rounded-md transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      {link.icon && <span className="mr-3">{link.icon}</span>}
+                      {link.label}
+                    </Link>
+                  </SheetClose>
+                ))}
+              </nav>
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
     </header>
   );
 };
 
 export default Header;
-
-    
