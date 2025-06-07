@@ -12,6 +12,8 @@ import {
   clearFirestoreCart,
   type CartItem
 } from '@/lib/cart-service-firebase';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 interface CartContextType {
   cartItems: CartItem[];
@@ -20,39 +22,35 @@ interface CartContextType {
   clearCart: (silent?: boolean) => Promise<void>;
   getCartTotal: () => number;
   getItemCount: () => number;
-  isLoading: boolean; // New loading state
+  isLoading: boolean; 
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true); // Initialize isLoading to true
+  const [isLoading, setIsLoading] = useState(true); 
   const { toast } = useToast();
   const { currentUser, isLoading: authIsLoading } = useAuth();
 
-  // Effect to load/clear cart based on auth state
   useEffect(() => {
     const manageCartOnAuthChange = async () => {
       setIsLoading(true);
       if (currentUser) {
-        // User is logged in, fetch cart from Firestore
         try {
           const firestoreCart = await getCartItemsFromDb(currentUser.uid);
           setCartItems(firestoreCart);
-          localStorage.removeItem('bookwiseCart'); // Clear any local cart
+          localStorage.removeItem('bookwiseCart'); 
         } catch (error) {
           console.error("Failed to load cart from Firestore:", error);
           toast({ title: "Cart Error", description: "Could not load your cart.", variant: "destructive" });
-          setCartItems([]); // Reset to empty cart on error
+          setCartItems([]); 
         }
       } else if (!authIsLoading) { 
-        // User is not logged in (and auth state is determined)
         const storedCartItems = localStorage.getItem('bookwiseCart');
         if (storedCartItems) {
           try {
             const parsedItems: CartItem[] = JSON.parse(storedCartItems);
-            // Ensure quantity is 1, remove addedAt as it's not relevant for local
             setCartItems(parsedItems.map(item => ({ ...item, quantity: 1, addedAt: undefined })));
           } catch (e) {
             setCartItems([]);
@@ -65,14 +63,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(false);
     };
 
-    if (!authIsLoading) { // Only run if auth state is resolved
+    if (!authIsLoading) { 
         manageCartOnAuthChange();
     }
   }, [currentUser, authIsLoading, toast]);
 
-  // Effect to save to localStorage for unauthenticated users
   useEffect(() => {
-    if (!currentUser && !authIsLoading && !isLoading) { // Only save to localStorage if not logged in, auth determined, and initial cart load finished
+    if (!currentUser && !authIsLoading && !isLoading) { 
       localStorage.setItem('bookwiseCart', JSON.stringify(cartItems));
     }
   }, [cartItems, currentUser, authIsLoading, isLoading]);
@@ -81,28 +78,59 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     if (currentUser) {
       const existingItem = cartItems.find((item) => item.id === book.id);
       if (existingItem) {
-        toast({ title: `${book.title} is already in your cart.`, description: 'You can purchase one copy per PDF book.' });
+        toast({ 
+            title: `${book.title} is already in your cart.`, 
+            description: 'You can purchase one copy per PDF book.',
+            action: (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/cart">View Cart</Link>
+              </Button>
+            ),
+        });
         return;
       }
       try {
         setIsLoading(true);
         const newCartItem = await addBookToFirestoreCart(currentUser.uid, book);
         setCartItems((prevItems) => [...prevItems, newCartItem]);
-        toast({ title: 'Added to Cart!', description: `${book.title} has been added to your cart.` });
+        toast({ 
+            title: 'Added to Cart!', 
+            description: `${book.title} has been added.`,
+            action: (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/cart">View Cart</Link>
+              </Button>
+            ),
+        });
       } catch (error) {
         toast({ title: "Cart Error", description: "Could not add item to your cart.", variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
     } else {
-      // Unauthenticated: use localStorage
       setCartItems((prevItems) => {
         const existingItem = prevItems.find((item) => item.id === book.id);
         if (existingItem) {
-          toast({ title: `${book.title} is already in your cart.`, description: 'You can purchase one copy per PDF book.' });
+          toast({ 
+            title: `${book.title} is already in your cart.`, 
+            description: 'You can purchase one copy per PDF book.',
+            action: (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/cart">View Cart</Link>
+              </Button>
+            ),
+          });
           return prevItems;
         }
-        toast({ title: 'Added to Cart!', description: `${book.title} has been added to your cart.` });
+        toast({ 
+            title: 'Added to Cart!', 
+            description: `${book.title} has been added.`,
+            action: (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/cart">View Cart</Link>
+              </Button>
+            ),
+        });
         return [...prevItems, { ...book, quantity: 1 }];
       });
     }
@@ -124,7 +152,6 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         setIsLoading(false);
       }
     } else {
-      // Unauthenticated: use localStorage
       setCartItems((prevItems) => prevItems.filter((item) => item.id !== bookId));
       toast({ title: 'Removed from Cart', description: `${itemToRemove.title} has been removed.`, variant: 'destructive' });
     }
@@ -143,7 +170,6 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         setIsLoading(false);
       }
     } else {
-      // Unauthenticated: use localStorage
       setCartItems([]);
       if (!silent) toast({ title: 'Cart Cleared', description: 'All items removed from your cart.' });
     }

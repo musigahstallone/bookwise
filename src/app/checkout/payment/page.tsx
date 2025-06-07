@@ -12,17 +12,16 @@ import { Loader2, CreditCard, Smartphone, AlertTriangle, ShieldCheck } from 'luc
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
-import { useRegion } from '@/contexts/RegionContext';
+import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData'; // Import from regionData
 import { handleCreateOrder, type OrderItemInput } from '@/lib/actions/trackingActions';
-import type { Book } from '@/data/books'; // For CartItem structure from session
-import type { Region } from '@/data/regionData';
+import type { Book } from '@/data/books'; 
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
 
 interface CheckoutData {
-  cartItems: Book[]; // Using full Book structure as passed from cart page
+  cartItems: Book[]; 
   totalAmountUSD: number;
   selectedRegionCode: string;
-  currencyCode: string; // Stored currency code
+  currencyCode: string; 
   itemCount: number;
 }
 
@@ -31,11 +30,11 @@ export default function MockPaymentPage() {
   const { toast } = useToast();
   const { currentUser, isLoading: authIsLoading } = useAuth();
   const { clearCart } = useCart();
-  const { getRegionByCode, defaultRegion } = useRegion(); // For formatting
+  // Removed getRegionByCode and defaultRegion from useRegion, will use direct import
 
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'mpesa' | null>(null);
-  const [isLoading, setIsLoading] = useState(false); // For overall page load
+  const [isLoading, setIsLoading] = useState(true); 
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -44,7 +43,7 @@ export default function MockPaymentPage() {
   const [expiryDate, setExpiryDate] = useState('');
   const [cvv, setCvv] = useState('');
 
-  const [displayRegion, setDisplayRegion] = useState<Region>(defaultRegion);
+  const [displayRegion, setDisplayRegion] = useState<Region>(defaultRegion); // Initialize with defaultRegion from regionData
 
   useEffect(() => {
     const dataString = sessionStorage.getItem('bookwiseCheckoutData');
@@ -52,7 +51,7 @@ export default function MockPaymentPage() {
       try {
         const parsedData: CheckoutData = JSON.parse(dataString);
         setCheckoutData(parsedData);
-        const region = getRegionByCode(parsedData.selectedRegionCode) || defaultRegion;
+        const region = getRegionByCode(parsedData.selectedRegionCode) || defaultRegion; // Use imported getRegionByCode & defaultRegion
         setDisplayRegion(region);
       } catch (e) {
         console.error("Error parsing checkout data from session storage:", e);
@@ -62,7 +61,7 @@ export default function MockPaymentPage() {
       setError("No checkout information found. Please start from your cart.");
     }
     setIsLoading(false);
-  }, [getRegionByCode, defaultRegion]);
+  }, []); // Removed getRegionByCode and defaultRegion from deps as they are stable imports
 
   const formatPriceInOrderCurrency = (usdPrice: number): string => {
     const convertedPrice = usdPrice * displayRegion.conversionRateToUSD;
@@ -89,13 +88,12 @@ export default function MockPaymentPage() {
     setIsProcessingPayment(true);
     toast({ title: "Processing Payment...", description: "This is a mock process. Please wait." });
 
-    // Mock 8-second delay
     await new Promise(resolve => setTimeout(resolve, 8000));
 
     const orderItems: OrderItemInput[] = checkoutData.cartItems.map(item => ({
         bookId: item.id,
         title: item.title,
-        price: item.price, // USD price at time of purchase
+        price: item.price, 
         coverImageUrl: item.coverImageUrl,
         pdfUrl: item.pdfUrl,
         dataAiHint: item.dataAiHint || 'book cover',
@@ -112,8 +110,8 @@ export default function MockPaymentPage() {
       );
 
       if (orderResult.success && orderResult.orderId) {
-        await clearCart(true); // Clear Firestore cart
-        sessionStorage.removeItem('bookwiseCheckoutData'); // Clear checkout session data
+        await clearCart(true); 
+        sessionStorage.removeItem('bookwiseCheckoutData'); 
 
         const purchasedItemsForSummary = orderItems.map(item => ({
             id: item.bookId,
@@ -124,7 +122,7 @@ export default function MockPaymentPage() {
             dataAiHint: item.dataAiHint,
         }));
         sessionStorage.setItem('lastPurchasedItems', JSON.stringify(purchasedItemsForSummary));
-        sessionStorage.setItem('lastPurchasedRegionCode', checkoutData.selectedRegionCode); // For order summary formatting
+        sessionStorage.setItem('lastPurchasedRegionCode', checkoutData.selectedRegionCode); 
         
         toast({
           title: "Mock Payment Successful!",
@@ -278,5 +276,3 @@ export default function MockPaymentPage() {
     </div>
   );
 }
-
-    
