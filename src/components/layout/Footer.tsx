@@ -28,17 +28,17 @@ const Footer = () => {
             <h3 className="text-lg font-headline font-semibold text-primary mb-3">Connect With Us</h3>
             <div className="flex space-x-4 mb-4">
               <Button variant="ghost" size="icon" asChild>
-                <a href="#" aria-label="Facebook" className="text-muted-foreground hover:text-primary">
+                <a href="https://facebook.com/bookwise" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-muted-foreground hover:text-primary">
                   <Facebook className="h-6 w-6" />
                 </a>
               </Button>
               <Button variant="ghost" size="icon" asChild>
-                <a href="#" aria-label="Instagram" className="text-muted-foreground hover:text-primary">
+                <a href="https://instagram.com/bookwise" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-muted-foreground hover:text-primary">
                   <Instagram className="h-6 w-6" />
                 </a>
               </Button>
               <Button variant="ghost" size="icon" asChild>
-                <a href="#" aria-label="X (Twitter)" className="text-muted-foreground hover:text-primary">
+                <a href="https://twitter.com/bookwise" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)" className="text-muted-foreground hover:text-primary">
                   <XIcon className="h-6 w-6" />
                 </a>
               </Button>

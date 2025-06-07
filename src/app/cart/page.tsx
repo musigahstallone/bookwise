@@ -16,7 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { handleCreateOrder, type OrderItemInput } from '@/lib/actions/trackingActions';
 
 export default function CartPage() {
-  const { cartItems, removeFromCart, clearCart, getCartTotal, getItemCount, isLoading: cartIsLoading } = useCart();
+  const { cartItems, removeFromCart, clearCart, getCartTotal, getItemCount, isLoading: cartIsLoadingContext } = useCart();
   const { selectedRegion, formatPrice } = useRegion();
   const { currentUser, isLoading: authIsLoading } = useAuth();
   const router = useRouter();
@@ -52,7 +52,7 @@ export default function CartPage() {
     const orderItems: OrderItemInput[] = cartItems.map(item => ({
         bookId: item.id,
         title: item.title,
-        price: item.price, // Price at time of purchase
+        price: item.price, // Price at time of purchase (USD)
         coverImageUrl: item.coverImageUrl,
         pdfUrl: item.pdfUrl,
         dataAiHint: item.dataAiHint || 'book cover',
@@ -62,7 +62,7 @@ export default function CartPage() {
       const orderResult = await handleCreateOrder(
         currentUser.uid,
         orderItems,
-        getCartTotal(),
+        getCartTotal(), // This is in USD
         selectedRegion.code,
         selectedRegion.currencyCode,
         getItemCount()
@@ -70,12 +70,10 @@ export default function CartPage() {
 
       if (orderResult.success) {
         // Store simplified items for order summary display
-        // These items now include pdfUrl and coverImageUrl
         const purchasedItemsForSummary = orderItems.map(item => ({
-            id: item.bookId, // map bookId to id for consistency if PurchasedItem expects id
+            id: item.bookId,
             title: item.title,
-            // author: item.author, // Author is not in OrderItemInput, would need to be added if required on summary
-            price: item.price,
+            price: item.price, // USD price
             coverImageUrl: item.coverImageUrl,
             pdfUrl: item.pdfUrl,
             dataAiHint: item.dataAiHint,
@@ -83,7 +81,7 @@ export default function CartPage() {
         sessionStorage.setItem('lastPurchasedItems', JSON.stringify(purchasedItemsForSummary));
         sessionStorage.setItem('lastPurchasedRegionCode', selectedRegion.code);
         
-        await clearCart(true); // Clear Firestore cart silently
+        await clearCart(true); // Clear Firestore cart silently for the logged-in user
         
         toast({
           title: "Mock Checkout Successful!",
@@ -109,7 +107,7 @@ export default function CartPage() {
     }
   };
   
-  if (cartIsLoading || authIsLoading) { 
+  if (authIsLoading || cartIsLoadingContext) { 
     return (
       <div className="flex flex-col items-center justify-center text-center py-20 min-h-[60vh]">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -155,7 +153,7 @@ export default function CartPage() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-headline font-bold text-primary">Your Shopping Cart</h1>
         {cartItems.length > 0 && (
-          <Button variant="outline" onClick={() => clearCart()} className="text-destructive hover:text-destructive border-destructive/50 hover:bg-destructive/10" disabled={isCheckingOut || cartIsLoading}>
+          <Button variant="outline" onClick={() => clearCart()} className="text-destructive hover:text-destructive border-destructive/50 hover:bg-destructive/10" disabled={isCheckingOut || cartIsLoadingContext}>
             <XCircle className="mr-2 h-4 w-4" /> Clear Cart
           </Button>
         )}
@@ -177,7 +175,7 @@ export default function CartPage() {
                 <p className="text-xs text-muted-foreground mt-1">Quantity: 1 (PDF Download)</p>
               </div>
               <div className="flex items-center space-x-3 mt-4 sm:mt-0 sm:ml-auto flex-shrink-0">
-                <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.id)} className="text-destructive hover:text-destructive" disabled={isCheckingOut || cartIsLoading}>
+                <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.id)} className="text-destructive hover:text-destructive" disabled={isCheckingOut || cartIsLoadingContext}>
                   <Trash2 className="h-5 w-5" />
                   <span className="sr-only">Remove item</span>
                 </Button>
@@ -209,7 +207,7 @@ export default function CartPage() {
                 size="lg" 
                 className="w-full bg-accent hover:bg-accent/90 text-accent-foreground mt-4" 
                 onClick={handleCheckout}
-                disabled={isCheckingOut || cartItems.length === 0 || cartIsLoading}
+                disabled={isCheckingOut || cartItems.length === 0 || cartIsLoadingContext}
               >
                 {isCheckingOut ? (
                   <>
