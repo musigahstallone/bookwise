@@ -6,13 +6,15 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { History, Download, ShoppingBag, Loader2, AlertTriangle } from 'lucide-react';
+import { History, Download, ShoppingBag, Loader2, AlertTriangle, CalendarDays, Hash, DollarSign, Package } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getOrdersByUserIdFromDb, type OrderWithUserDetails } from '@/lib/tracking-service-firebase';
 import { handleRecordDownload } from '@/lib/actions/trackingActions';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { getRegionByCode, defaultRegion } from '@/data/regionData'; // Import directly
+import { getRegionByCode, defaultRegion } from '@/data/regionData';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 
 export default function MyOrdersPage() {
   const { currentUser, isLoading: authIsLoading } = useAuth();
@@ -37,7 +39,6 @@ export default function MyOrdersPage() {
           setIsLoading(false);
         });
     } else if (!authIsLoading) {
-      // If auth is done loading and there's no user, stop loading
       setIsLoading(false);
     }
   }, [currentUser, authIsLoading]);
@@ -46,6 +47,14 @@ export default function MyOrdersPage() {
     if (!currentUser) {
       toast({ title: "Authentication Error", description: "You must be logged in.", variant: "destructive" });
       return;
+    }
+    if (!pdfUrl || pdfUrl.includes('placeholder-book.pdf') || pdfUrl.trim() === '') {
+        toast({
+            title: "Download Not Available",
+            description: `The PDF for "${bookTitle}" is currently not available.`,
+            variant: "destructive",
+        });
+        return;
     }
     try {
       const result = await handleRecordDownload(bookId, currentUser.uid);
@@ -61,7 +70,7 @@ export default function MyOrdersPage() {
   };
 
   const formatOrderPrice = (totalAmountUSD: number, regionCode: string, currencySymbolOrder: string) => {
-    const orderRegion = getRegionByCode(regionCode) || defaultRegion; // Use imported functions
+    const orderRegion = getRegionByCode(regionCode) || defaultRegion;
     const convertedPrice = totalAmountUSD * orderRegion.conversionRateToUSD;
      let displayPrice;
     if (orderRegion.currencyCode === 'KES') {
@@ -132,48 +141,68 @@ export default function MyOrdersPage() {
 
       <div className="space-y-8">
         {orders.map((order) => (
-          <Card key={order.id} className="shadow-lg">
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center">
-                <div>
-                    <CardTitle className="text-xl font-headline">Order ID: <span className="font-normal text-base text-muted-foreground">{order.id.substring(0,8)}...</span></CardTitle>
-                    <CardDescription>
-                    Placed on: {format(order.orderDate, "PPpp")}
-                    </CardDescription>
+          <Card key={order.id} className="shadow-lg border border-border">
+            <CardHeader className="bg-muted/30 p-4 rounded-t-lg">
+              <div className="flex flex-col sm:flex-row justify-between gap-2">
+                <div className="space-y-1">
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <Hash className="h-4 w-4 mr-1.5" />
+                    Order ID: <span className="font-medium text-foreground ml-1">{order.id.substring(0,8)}...</span>
+                  </div>
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <CalendarDays className="h-4 w-4 mr-1.5" />
+                    Placed: <span className="font-medium text-foreground ml-1">{format(order.orderDate, "MMM d, yyyy 'at' h:mm a")}</span>
+                  </div>
                 </div>
-                <p className="text-lg font-semibold text-primary mt-2 sm:mt-0">
-                    Total: {formatOrderPrice(order.totalAmountUSD, order.regionCode, order.currencyCode.toUpperCase())} 
-                    <span className="text-sm text-muted-foreground"> ({order.itemCount} item{order.itemCount !== 1 ? 's' : ''})</span>
-                </p>
+                <div className="space-y-1 text-left sm:text-right">
+                   <div className="flex items-center text-sm text-muted-foreground sm:justify-end">
+                        <Package className="h-4 w-4 mr-1.5" />
+                        Items: <span className="font-medium text-foreground ml-1">{order.itemCount}</span>
+                    </div>
+                  <div className="flex items-center text-lg font-semibold text-primary sm:justify-end">
+                    <DollarSign className="h-5 w-5 mr-1" />
+                    Total: {formatOrderPrice(order.totalAmountUSD, order.regionCode, order.currencyCode.toUpperCase())}
+                  </div>
+                </div>
               </div>
+               <Badge variant={order.status === 'completed' ? 'default' : 'secondary'} className="mt-2 w-fit capitalize bg-green-100 text-green-700 border-green-300">
+                  {order.status}
+               </Badge>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <h4 className="font-semibold text-md text-foreground">Items:</h4>
+            <CardContent className="p-4 space-y-4">
+              <h4 className="font-semibold text-md text-foreground -mb-2">Items Purchased:</h4>
               {order.items.map((item, index) => (
-                <div key={item.bookId || index} className="flex flex-col sm:flex-row items-center gap-4 p-3 border rounded-md bg-background/50">
-                  <div className="w-20 h-20 sm:w-16 sm:h-16 relative flex-shrink-0 rounded overflow-hidden aspect-square">
-                    <Image
-                      src={item.coverImageUrl || 'https://placehold.co/100x100.png'}
-                      alt={item.title}
-                      layout="fill"
-                      objectFit="cover"
-                      data-ai-hint={item.dataAiHint || 'ordered book cover'}
-                    />
+                <div key={item.bookId || index} className="pt-4">
+                  {index > 0 && <Separator className="mb-4" />}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className="w-24 h-32 sm:w-20 sm:h-[115px] relative flex-shrink-0 rounded overflow-hidden shadow-sm border aspect-[2/3]">
+                      <Image
+                        src={item.coverImageUrl || 'https://placehold.co/80x120.png'}
+                        alt={item.title}
+                        layout="fill"
+                        objectFit="cover"
+                        data-ai-hint={item.dataAiHint || 'ordered book cover'}
+                      />
+                    </div>
+                    <div className="flex-grow">
+                      <Link href={`/books/${item.bookId}`} className="hover:underline">
+                        <h3 className="text-lg font-headline font-semibold text-primary">{item.title}</h3>
+                      </Link>
+                      <p className="text-sm text-foreground mt-1">
+                        Price Paid: {formatOrderPrice(item.price, order.regionCode, order.currencyCode.toUpperCase())}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full sm:w-auto mt-3 sm:mt-0 self-center sm:self-end"
+                      onClick={() => onDownloadClick(item.bookId, item.title, item.pdfUrl)}
+                      disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf')}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download PDF
+                    </Button>
                   </div>
-                  <div className="flex-grow text-center sm:text-left">
-                    <h3 className="text-md font-semibold text-primary">{item.title}</h3>
-                    <p className="text-sm text-foreground">Price Paid: {formatOrderPrice(item.price, order.regionCode, order.currencyCode.toUpperCase())}</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full sm:w-auto mt-2 sm:mt-0"
-                    onClick={() => onDownloadClick(item.bookId, item.title, item.pdfUrl)}
-                    disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf')}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download PDF
-                  </Button>
                 </div>
               ))}
             </CardContent>
@@ -184,3 +213,4 @@ export default function MyOrdersPage() {
   );
 }
 
+    
