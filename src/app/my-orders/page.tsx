@@ -12,7 +12,7 @@ import { getOrdersByUserIdFromDb, type OrderWithUserDetails } from '@/lib/tracki
 import { handleRecordDownload } from '@/lib/actions/trackingActions';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { useRegion } from '@/contexts/RegionContext'; // To format price based on region at time of order
+import { getRegionByCode, defaultRegion } from '@/data/regionData'; // Import directly
 
 export default function MyOrdersPage() {
   const { currentUser, isLoading: authIsLoading } = useAuth();
@@ -20,7 +20,8 @@ export default function MyOrdersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const { getRegionByCode: getRegionDataByCode, defaultRegion } = useRegion(); // For formatting price
+  // Removed getRegionByCode and defaultRegion from useRegion() destructuring
+  // const { getRegionByCode: getRegionDataByCode, defaultRegion } = useRegion(); // For formatting price
 
   useEffect(() => {
     if (currentUser) {
@@ -62,7 +63,7 @@ export default function MyOrdersPage() {
   };
 
   const formatOrderPrice = (totalAmountUSD: number, regionCode: string, currencySymbolOrder: string) => {
-    const orderRegion = getRegionDataByCode(regionCode) || defaultRegion;
+    const orderRegion = getRegionByCode(regionCode) || defaultRegion; // Use imported functions
     const convertedPrice = totalAmountUSD * orderRegion.conversionRateToUSD;
      let displayPrice;
     if (orderRegion.currencyCode === 'KES') {
