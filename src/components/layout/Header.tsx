@@ -113,17 +113,25 @@ const Header = () => {
             </Button>
           ))}
           {currentUser && ( 
-            <Button variant="ghost" asChild className={cn(linkClasses, "relative")}>
-              <Link href="/cart" className="flex items-center">
-                <ShoppingCart className="h-5 w-5 mr-1" />
-                Cart
-                {itemCount > 0 && (
-                  <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
-                    {itemCount}
-                  </Badge>
-                )}
-              </Link>
-            </Button>
+            <>
+              <Button variant="ghost" asChild className={cn(linkClasses, "relative")}>
+                <Link href="/cart" className="flex items-center">
+                  <ShoppingCart className="h-5 w-5 mr-1" />
+                  Cart
+                  {itemCount > 0 && (
+                    <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                      {itemCount}
+                    </Badge>
+                  )}
+                </Link>
+              </Button>
+              <Button variant="ghost" asChild className={linkClasses}>
+                <Link href="/my-orders" className="flex items-center">
+                  <History className="h-5 w-5 mr-1" />
+                  My Orders
+                </Link>
+              </Button>
+            </>
           )}
           <div className="ml-2 pl-2 border-l">
             {renderAuthSection()} 
