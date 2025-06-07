@@ -2,9 +2,17 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpen, Sparkles, Menu, X, ShoppingCart, Globe, LogIn, LogOut, UserCircle, Loader2, UserPlus, History } from 'lucide-react';
+import { BookOpen, Sparkles, Menu, X, ShoppingCart, Globe, LogIn, LogOut, UserCircle, Loader2, UserPlus, History, ChevronsUpDown, LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useState } from 'react';
 import { useCart } from '@/contexts/CartContext';
 import { Badge } from '@/components/ui/badge';
@@ -20,21 +28,23 @@ import { useRegion } from '@/contexts/RegionContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation'; 
 
-
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/shop", label: "Browse Books" },
-  { href: "/recommendations", label: "AI Advisor", icon: <Sparkles className="h-5 w-5 mr-1" />, desktopOnly: false, mobileOnly: true },
+  { href: "/recommendations", label: "AI Advisor", icon: <Sparkles className="h-5 w-5 mr-1" /> },
 ];
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
   
   const { getItemCount } = useCart();
   const { selectedRegion, availableRegions, setSelectedRegionByCode } = useRegion();
   const { currentUser, isLoading: authLoading, logout } = useAuth();
   const itemCount = getItemCount();
   const router = useRouter(); 
+
+  const isAdmin = currentUser?.firestoreData?.role === 'admin';
 
   const headerClasses = cn(
     "sticky top-0 z-50 bg-background shadow-none text-foreground"
@@ -48,45 +58,117 @@ const Header = () => {
     "text-foreground hover:text-primary"
   );
 
-  const renderAuthSection = (isMobile = false) => {
+  const handleLogout = async () => {
+    await logout();
+    setIsMobileMenuOpen(false);
+    setIsAccountDropdownOpen(false);
+    router.push('/');
+    router.refresh();
+  };
+
+  const renderDesktopAuth = () => {
     if (authLoading) {
-      return <Loader2 className="h-6 w-6 animate-spin text-primary" />;
+      return <Loader2 className="h-6 w-6 animate-spin text-primary ml-4" />;
     }
 
     if (currentUser) {
       const userName = currentUser.firestoreData?.name || currentUser.displayName || currentUser.email;
-      const userEmail = currentUser.email;
-      const isAdmin = currentUser.firestoreData?.role === 'admin';
-
       return (
-        <div className={cn("flex items-center", isMobile ? "flex-col space-y-2 items-start w-full" : "space-x-2")}>
-          {isMobile && (
-            <div className="flex items-center mb-1 text-base">
-                <UserCircle className="mr-2 h-5 w-5 text-primary" />
-                <span className="truncate max-w-[180px]">{userName || userEmail}</span>
-                {isAdmin && <Badge variant="destructive" className="ml-2 text-xs">Admin</Badge>}
-            </div>
-          )}
-          <Button variant={isMobile ? "outline" : "ghost"} size={isMobile ? "default" : "sm"} onClick={async () => {await logout(); setIsMobileMenuOpen(false); router.push('/'); router.refresh();}} className={cn(isMobile && "w-full justify-start")}>
-            <LogOut className="mr-2 h-4 w-4" /> Logout
-          </Button>
-        </div>
+        <DropdownMenu open={isAccountDropdownOpen} onOpenChange={setIsAccountDropdownOpen}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className={cn(iconButtonClasses, "ml-4")}>
+              <UserCircle className="h-7 w-7" />
+              <span className="sr-only">Account options</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="truncate">
+              <div className="text-sm font-medium">{userName}</div>
+              {currentUser.email && <div className="text-xs text-muted-foreground truncate">{currentUser.email}</div>}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/my-orders" className="flex items-center cursor-pointer w-full">
+                <History className="mr-2 h-4 w-4" /> My Orders
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/cart" className="flex items-center cursor-pointer w-full">
+                <ShoppingCart className="mr-2 h-4 w-4" /> Cart
+                {itemCount > 0 && (
+                  <Badge variant="secondary" className="ml-auto">
+                    {itemCount}
+                  </Badge>
+                )}
+              </Link>
+            </DropdownMenuItem>
+            {isAdmin && (
+              <DropdownMenuItem asChild>
+                <Link href="/admin" className="flex items-center cursor-pointer w-full text-primary hover:!text-primary">
+                  <LayoutDashboard className="mr-2 h-4 w-4" /> Admin Panel
+                </Link>
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+              <LogOut className="mr-2 h-4 w-4" /> Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       );
     }
 
     return (
-      <div className={cn("flex", isMobile ? "flex-col space-y-2 items-start w-full" : "space-x-2")}>
-        <Button variant={isMobile ? "outline" : "ghost"} size={isMobile ? "default" : "sm"} asChild className={cn(isMobile && "w-full justify-start")}>
-          <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
-            <LogIn className="mr-2 h-4 w-4" /> Login
+      <Button variant="outline" size="default" asChild className="ml-4">
+        <Link href="/login">Login / Sign Up</Link>
+      </Button>
+    );
+  };
+
+  const renderMobileAuth = () => {
+    if (authLoading) {
+      return <Loader2 className="h-6 w-6 animate-spin text-primary" />;
+    }
+    if (currentUser) {
+      const userName = currentUser.firestoreData?.name || currentUser.displayName || currentUser.email;
+      return (
+        <>
+          <div className="flex items-center mb-1 px-3 py-2 text-base">
+              <UserCircle className="mr-2 h-5 w-5 text-primary" />
+              <span className="truncate max-w-[180px]">{userName}</span>
+              {isAdmin && <Badge variant="destructive" className="ml-2 text-xs">Admin</Badge>}
+          </div>
+           {isAdmin && (
+            <SheetClose asChild>
+              <Link
+                href="/admin"
+                className="flex items-center py-3 px-3 text-lg text-primary hover:bg-muted rounded-md transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <LayoutDashboard className="h-5 w-5 mr-3" />
+                Admin Panel
+              </Link>
+            </SheetClose>
+          )}
+          <Button variant="outline" size="default" onClick={handleLogout} className="w-full justify-start text-base py-3 px-3">
+            <LogOut className="mr-3 h-5 w-5" /> Logout
+          </Button>
+        </>
+      );
+    }
+    return (
+      <>
+        <SheetClose asChild>
+          <Link href="/login" className="flex items-center py-3 px-3 text-lg text-card-foreground hover:bg-muted rounded-md transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
+            <LogIn className="mr-3 h-5 w-5" /> Login
           </Link>
-        </Button>
-        <Button variant={isMobile ? "default" : "outline"} size={isMobile ? "default" : "sm"} asChild className={cn(isMobile && "w-full justify-start")}>
-          <Link href="/signup" onClick={() => setIsMobileMenuOpen(false)}>
-            <UserPlus className="mr-2 h-4 w-4" /> Sign Up
+        </SheetClose>
+        <SheetClose asChild>
+          <Link href="/signup" className="flex items-center py-3 px-3 text-lg text-card-foreground hover:bg-muted rounded-md transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
+            <UserPlus className="mr-3 h-5 w-5" /> Sign Up
           </Link>
-        </Button>
-      </div>
+        </SheetClose>
+      </>
     );
   };
 
@@ -103,44 +185,21 @@ const Header = () => {
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center space-x-1">
-          {navLinks.filter(link => !link.mobileOnly).map((link) => ( 
+        <nav className="hidden md:flex items-center">
+          {navLinks.map((link) => ( 
             <Button variant="ghost" asChild key={link.href} className={linkClasses}>
               <Link href={link.href} className="flex items-center">
-                {link.icon && !link.mobileOnly && <span className="hidden sm:inline-block">{link.icon}</span>}
+                {link.icon && <span className="hidden sm:inline-block">{link.icon}</span>}
                 {link.label}
               </Link>
             </Button>
           ))}
-          {currentUser && ( 
-            <>
-              <Button variant="ghost" asChild className={cn(linkClasses, "relative")}>
-                <Link href="/cart" className="flex items-center">
-                  <ShoppingCart className="h-5 w-5 mr-1" />
-                  Cart
-                  {itemCount > 0 && (
-                    <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
-                      {itemCount}
-                    </Badge>
-                  )}
-                </Link>
-              </Button>
-              <Button variant="ghost" asChild className={linkClasses}>
-                <Link href="/my-orders" className="flex items-center">
-                  <History className="h-5 w-5 mr-1" />
-                  My Orders
-                </Link>
-              </Button>
-            </>
-          )}
-          <div className="ml-2 pl-2 border-l">
-            {renderAuthSection()} 
-          </div>
+          {renderDesktopAuth()}
         </nav>
 
         {/* Mobile Navigation */}
         <div className="md:hidden flex items-center space-x-2">
-          {currentUser && ( 
+          {currentUser && !authLoading && ( 
             <Button variant="ghost" size="icon" asChild className={cn(iconButtonClasses, "relative")}>
               <Link href="/cart" onClick={() => setIsMobileMenuOpen(false)}>
                 <ShoppingCart className="h-6 w-6" />
@@ -171,7 +230,7 @@ const Header = () => {
                     <span className="sr-only">Close</span>
                   </SheetClose>
               </SheetHeader>
-              <nav className="flex flex-col space-y-3">
+              <nav className="flex flex-col space-y-1">
                 {navLinks.map((link) => ( 
                   <SheetClose asChild key={link.href}>
                     <Link
@@ -215,22 +274,22 @@ const Header = () => {
                 )}
                  <div className="px-3 pt-3 border-t mt-3">
                     <p className="text-sm text-muted-foreground mb-2">Region:</p>
-                    <Select value={selectedRegion.code} onValueChange={(code) => {setSelectedRegionByCode(code); setIsMobileMenuOpen(false);}}>
+                    <Select value={selectedRegion.code} onValueChange={(code) => {setSelectedRegionByCode(code); /* setIsMobileMenuOpen(false); Keeping menu open for region change */ }}>
                         <SelectTrigger className="w-full text-base">
                             <SelectValue placeholder="Select Region" />
                         </SelectTrigger>
                         <SelectContent>
                             {availableRegions.map(region => (
                             <SelectItem key={region.code} value={region.code} className="text-base">
-                                {region.name}
+                                {region.name} ({region.currencyCode})
                             </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
                  </div>
-                 <div className="px-3 pt-3 border-t mt-3">
-                    <p className="text-sm text-muted-foreground mb-2">Account:</p>
-                    {renderAuthSection(true)}
+                 <div className="px-3 pt-3 border-t mt-3 space-y-2">
+                    <p className="text-sm text-muted-foreground mb-1">Account:</p>
+                    {renderMobileAuth()}
                  </div>
               </nav>
             </SheetContent>
