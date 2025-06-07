@@ -14,8 +14,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import PaginationControls from '@/components/books/PaginationControls'; // Assuming this is generic enough
 import { format } from 'date-fns';
+import { getRegionByCode, defaultRegion } from '@/data/regionData'; // Import for formatting
 
 const ORDERS_PER_PAGE = 10;
 
@@ -24,6 +24,24 @@ interface ManageOrdersPageProps {
     page?: string;
   };
 }
+
+// Helper function for price formatting, similar to other contexts
+const formatAdminOrderPrice = (totalAmountUSD: number, orderRegionCode: string, orderCurrencyCode: string) => {
+  const regionForOrder = getRegionByCode(orderRegionCode) || defaultRegion;
+  const convertedPrice = totalAmountUSD * regionForOrder.conversionRateToUSD;
+   let displayPrice;
+  if (regionForOrder.currencyCode === 'KES') {
+      if (Math.abs(convertedPrice - Math.round(convertedPrice)) < 0.005) {
+           displayPrice = Math.round(convertedPrice).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      } else {
+          displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+  } else {
+       displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return `${orderCurrencyCode} ${displayPrice}`;
+};
+
 
 export default async function ManageOrdersPage({ searchParams }: ManageOrdersPageProps) {
   let orders: OrderWithUserDetails[] = [];
@@ -89,7 +107,7 @@ export default async function ManageOrdersPage({ searchParams }: ManageOrdersPag
                         <TableHead>Customer</TableHead>
                         <TableHead className="hidden md:table-cell">Date</TableHead>
                         <TableHead className="text-right">Items</TableHead>
-                        <TableHead className="text-right">Total ({defaultCurrencySymbol})</TableHead>
+                        <TableHead className="text-right">Total (Order Currency)</TableHead>
                         <TableHead className="hidden sm:table-cell">Region</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
@@ -104,7 +122,7 @@ export default async function ManageOrdersPage({ searchParams }: ManageOrdersPag
                           </TableCell>
                           <TableCell className="hidden md:table-cell">{format(order.orderDate, "PPp")}</TableCell>
                           <TableCell className="text-right">{order.itemCount}</TableCell>
-                          <TableCell className="text-right">{order.totalAmountUSD.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{formatAdminOrderPrice(order.totalAmountUSD, order.regionCode, order.currencyCode)}</TableCell>
                           <TableCell className="hidden sm:table-cell">{order.regionCode} ({order.currencyCode})</TableCell>
                           <TableCell>
                             <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
@@ -116,36 +134,6 @@ export default async function ManageOrdersPage({ searchParams }: ManageOrdersPag
                     </TableBody>
                   </Table>
                 </div>
-                {totalPages > 1 && (
-                   <PaginationControls
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={(page) => {
-                        // Pagination on server components requires navigation
-                        const params = new URLSearchParams(searchParams);
-                        params.set('page', page.toString());
-                        // router.push(`/admin/orders?${params.toString()}`);
-                        // For server components, we'd link or re-fetch.
-                        // This simple pagination will re-render the page with new searchParams.
-                        // For a client component, onPageChange would directly update state.
-                        // Here, we rely on Link components or full page reloads for pagination.
-                        // A client component wrapper for pagination is common.
-                        // For now, this will work by navigating to the new URL.
-                        // We'd use <Link href={`/admin/orders?page=${page}`}>
-                        // Inside a client PaginationControls component.
-                        // For now, we'll just show a simple message or rely on manual URL change.
-                         return (
-                            <div className="flex justify-center mt-4 space-x-2">
-                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                    <Button key={page} variant={currentPage === page ? "default" : "outline"} asChild>
-                                        <Link href={`/admin/orders?page=${page}`}>{page}</Link>
-                                    </Button>
-                                ))}
-                            </div>
-                        )
-                    }}
-                />
-                )}
                  {totalPages > 1 && (
                      <div className="flex justify-center mt-6 space-x-2">
                         {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
@@ -167,6 +155,3 @@ export default async function ManageOrdersPage({ searchParams }: ManageOrdersPag
   );
 }
 
-// Helper to get default currency symbol for display purposes
-// This might need to be more dynamic if you support multiple display currencies in admin
-const defaultCurrencySymbol = '$';

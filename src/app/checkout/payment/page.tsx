@@ -61,17 +61,16 @@ export default function MockPaymentPage() {
         setDisplayRegion(region);
 
         if (parsedData.totalAmountUSD) {
-            const kesRegionDetails = getRegionByCode('KE'); // Assuming 'KE' is the code for Kenya
+            const kesRegionDetails = getRegionByCode('KE'); 
             if (kesRegionDetails) {
                 const amountInKES = parsedData.totalAmountUSD * kesRegionDetails.conversionRateToUSD;
-                const kesSymbol = kesRegionDetails.currencySymbol;
                 let formattedKESPrice;
                 if (Math.abs(amountInKES - Math.round(amountInKES)) < 0.005) {
                     formattedKESPrice = Math.round(amountInKES).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
                 } else {
                     formattedKESPrice = amountInKES.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 }
-                setMpesaAmountKES(`${kesSymbol} ${formattedKESPrice}`);
+                setMpesaAmountKES(`${kesRegionDetails.currencyCode} ${formattedKESPrice}`);
             }
         }
 
@@ -97,12 +96,12 @@ export default function MockPaymentPage() {
     } else {
          formattedPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    return `${displayRegion.currencySymbol} ${formattedPrice}`;
+    return `${displayRegion.currencyCode} ${formattedPrice}`;
   };
 
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value.replace(/\D/g, ''); // Remove non-digits
-    const limitedValue = rawValue.slice(0, 16); // Limit to 16 digits
+    const rawValue = e.target.value.replace(/\D/g, ''); 
+    const limitedValue = rawValue.slice(0, 16); 
 
     let formattedValue = '';
     for (let i = 0; i < limitedValue.length; i++) {
@@ -116,13 +115,12 @@ export default function MockPaymentPage() {
   };
 
   const handleExpiryDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let rawValue = e.target.value.replace(/\D/g, ''); // Remove non-digits
+    let rawValue = e.target.value.replace(/\D/g, ''); 
     let formattedValue = rawValue;
 
     if (rawValue.length > 2) {
       formattedValue = rawValue.slice(0, 2) + '/' + rawValue.slice(2, 4);
     } else if (rawValue.length <=2 && expiryDate.endsWith('/') && e.nativeEvent.inputType === 'deleteContentBackward') {
-        // handle backspace over '/'
          formattedValue = rawValue.slice(0, rawValue.length);
     }
     
@@ -131,26 +129,31 @@ export default function MockPaymentPage() {
     }
 
     setExpiryDate(formattedValue);
-    // Basic validation: MM/YY format, MM between 01-12
     const parts = formattedValue.split('/');
-    const month = parseInt(parts[0], 10);
-    const year = parseInt(parts[1], 10);
-    const currentYearShort = new Date().getFullYear() % 100;
-    const isValidMonth = month >= 1 && month <= 12;
-    const isValidYear = parts[1]?.length === 2 && year >= currentYearShort; // Simple check: year is current or future
-    setIsExpiryDateValid(formattedValue.length === 5 && isValidMonth && isValidYear);
+    if (parts.length === 2) {
+        const month = parseInt(parts[0], 10);
+        const year = parseInt(parts[1], 10);
+        const currentYearShort = new Date().getFullYear() % 100;
+        const currentMonth = new Date().getMonth() + 1;
+        const isValidMonth = month >= 1 && month <= 12;
+        // Check if year is current or future, and if current year, month is current or future
+        const isValidYear = year > currentYearShort || (year === currentYearShort && month >= currentMonth);
+        setIsExpiryDateValid(formattedValue.length === 5 && isValidMonth && isValidYear);
+    } else {
+        setIsExpiryDateValid(false);
+    }
   };
 
   const handleCvvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value.replace(/\D/g, ''); // Remove non-digits
-    const limitedValue = rawValue.slice(0, 3); // Limit to 3 digits
+    const rawValue = e.target.value.replace(/\D/g, ''); 
+    const limitedValue = rawValue.slice(0, 3); 
     setCvv(limitedValue);
     setIsCvvValid(limitedValue.length === 3);
   };
   
   const handleMpesaNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, ''); // Allow only digits
-    const limitedValue = value.slice(0,10); // Kenyan numbers are 10 digits (e.g. 07xxxxxxxx or 01xxxxxxxx)
+    const value = e.target.value.replace(/\D/g, ''); 
+    const limitedValue = value.slice(0,10); 
     setMpesaNumber(limitedValue);
     setIsMpesaNumberValid(/^(07|01)\d{8}$/.test(limitedValue));
   };
@@ -171,7 +174,7 @@ export default function MockPaymentPage() {
     const orderItems: OrderItemInput[] = checkoutData.cartItems.map(item => ({
         bookId: item.id,
         title: item.title,
-        price: item.price,
+        price: item.price, 
         coverImageUrl: item.coverImageUrl,
         pdfUrl: item.pdfUrl,
         dataAiHint: item.dataAiHint || 'book cover',
@@ -313,7 +316,7 @@ export default function MockPaymentPage() {
                   value={cardNumber} 
                   onChange={handleCardNumberChange} 
                   disabled={isProcessingPayment} 
-                  maxLength={19} // 16 digits + 3 spaces
+                  maxLength={19} 
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -326,7 +329,7 @@ export default function MockPaymentPage() {
                     value={expiryDate} 
                     onChange={handleExpiryDateChange} 
                     disabled={isProcessingPayment}
-                    maxLength={5} // MM/YY
+                    maxLength={5} 
                    />
                 </div>
                 <div>

@@ -3,7 +3,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-// import Image from 'next/image'; // Removed as per request
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { History, Download, ShoppingBag, Loader2, AlertTriangle, CalendarDays, Hash, DollarSign, Package } from 'lucide-react';
@@ -69,11 +68,11 @@ export default function MyOrdersPage() {
     }
   };
 
-  const formatOrderPrice = (totalAmountUSD: number, regionCode: string, currencySymbolOrder: string) => {
-    const orderRegion = getRegionByCode(regionCode) || defaultRegion;
-    const convertedPrice = totalAmountUSD * orderRegion.conversionRateToUSD;
+  const formatOrderPrice = (totalAmountUSD: number, orderRegionCode: string, orderCurrencyCode: string) => {
+    const regionForOrder = getRegionByCode(orderRegionCode) || defaultRegion;
+    const convertedPrice = totalAmountUSD * regionForOrder.conversionRateToUSD;
      let displayPrice;
-    if (orderRegion.currencyCode === 'KES') {
+    if (regionForOrder.currencyCode === 'KES') {
         if (Math.abs(convertedPrice - Math.round(convertedPrice)) < 0.005) {
              displayPrice = Math.round(convertedPrice).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         } else {
@@ -82,7 +81,7 @@ export default function MyOrdersPage() {
     } else {
          displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    return `${currencySymbolOrder}${displayPrice}`;
+    return `${orderCurrencyCode} ${displayPrice}`;
   };
 
   if (isLoading || authIsLoading) {
@@ -161,7 +160,7 @@ export default function MyOrdersPage() {
                     </div>
                   <div className="flex items-center text-lg font-semibold text-primary sm:justify-end">
                     <DollarSign className="h-5 w-5 mr-1" />
-                    Total: {formatOrderPrice(order.totalAmountUSD, order.regionCode, order.currencyCode.toUpperCase())}
+                    Total: {formatOrderPrice(order.totalAmountUSD, order.regionCode, order.currencyCode)}
                   </div>
                 </div>
               </div>
@@ -180,7 +179,7 @@ export default function MyOrdersPage() {
                         <h3 className="text-md font-headline font-semibold text-primary">{item.title}</h3>
                       </Link>
                       <p className="text-sm text-muted-foreground">
-                        Price Paid: {formatOrderPrice(item.price, order.regionCode, order.currencyCode.toUpperCase())}
+                        Price Paid: {formatOrderPrice(item.price, order.regionCode, order.currencyCode)}
                       </p>
                     </div>
                     <Button

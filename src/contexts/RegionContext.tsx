@@ -42,16 +42,12 @@ export const RegionProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const formatPrice = useCallback((usdPrice: number): string => {
-    if (!isInitialized) return `${defaultRegion.currencySymbol}${(usdPrice * defaultRegion.conversionRateToUSD).toFixed(2)}`; // Show default while loading
+    if (!isInitialized) return `${defaultRegion.currencyCode} ${(usdPrice * defaultRegion.conversionRateToUSD).toFixed(2)}`;
 
     const convertedPrice = usdPrice * selectedRegion.conversionRateToUSD;
     
-    // Handle potential floating point inaccuracies for KES by rounding to 0 decimal places if it's a whole number.
-    // For EUR and USD, standard 2 decimal places.
     let displayPrice;
     if (selectedRegion.currencyCode === 'KES') {
-        // If KES price is very close to a whole number, display as whole. Otherwise 2 decimals.
-        // This is a simple heuristic. Proper currency formatting libraries are better for production.
         if (Math.abs(convertedPrice - Math.round(convertedPrice)) < 0.005) {
              displayPrice = Math.round(convertedPrice).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         } else {
@@ -61,7 +57,7 @@ export const RegionProvider = ({ children }: { children: ReactNode }) => {
          displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    return `${selectedRegion.currencySymbol}${displayPrice}`;
+    return `${selectedRegion.currencyCode} ${displayPrice}`;
   }, [selectedRegion, isInitialized]);
 
 
@@ -92,3 +88,4 @@ export const useRegion = () => {
   }
   return context;
 };
+
