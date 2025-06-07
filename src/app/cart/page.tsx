@@ -13,7 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 import { useRegion } from '@/contexts/RegionContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { handleCreateOrder, type OrderItemInput } from '@/lib/actions/trackingActions';
+// Order creation is now handled on the payment page
+// import { handleCreateOrder, type OrderItemInput } from '@/lib/actions/trackingActions';
 
 export default function CartPage() {
   const { cartItems, removeFromCart, clearCart, getCartTotal, getItemCount, isLoading: cartIsLoadingContext } = useCart();
@@ -21,9 +22,9 @@ export default function CartPage() {
   const { currentUser, isLoading: authIsLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [isNavigatingToPayment, setIsNavigatingToPayment] = useState(false);
 
-  const handleCheckout = async () => {
+  const handleProceedToPayment = () => {
     if (!currentUser) {
       toast({
         title: "Login Required",
@@ -37,74 +38,41 @@ export default function CartPage() {
     if (cartItems.length === 0) {
       toast({
         title: "Your cart is empty!",
-        description: "Please add some books to your cart before proceeding to checkout.",
+        description: "Please add some books to your cart before proceeding.",
         variant: "destructive",
       });
       return;
     }
 
-    setIsCheckingOut(true);
+    setIsNavigatingToPayment(true);
     toast({
-      title: "Processing your order...",
+      title: "Proceeding to Payment...",
       description: "Please wait a moment.",
     });
 
-    const orderItems: OrderItemInput[] = cartItems.map(item => ({
+    // Store cart data in session storage for the payment page
+    const paymentData = {
+      cartItems: cartItems.map(item => ({ // Store relevant item details
         bookId: item.id,
         title: item.title,
-        price: item.price, // Price at time of purchase (USD)
+        author: item.author, // Keep author for display consistency if needed
+        price: item.price, // USD price
         coverImageUrl: item.coverImageUrl,
         pdfUrl: item.pdfUrl,
         dataAiHint: item.dataAiHint || 'book cover',
-    }));
+        publishedYear: item.publishedYear,
+        category: item.category,
+        description: item.description,
+        longDescription: item.longDescription,
+      })),
+      totalAmountUSD: getCartTotal(),
+      selectedRegionCode: selectedRegion.code,
+      currencyCode: selectedRegion.currencyCode,
+      itemCount: getItemCount(),
+    };
+    sessionStorage.setItem('bookwiseCheckoutData', JSON.stringify(paymentData));
 
-    try {
-      const orderResult = await handleCreateOrder(
-        currentUser.uid,
-        orderItems,
-        getCartTotal(), // This is in USD
-        selectedRegion.code,
-        selectedRegion.currencyCode,
-        getItemCount()
-      );
-
-      if (orderResult.success) {
-        // Store simplified items for order summary display
-        const purchasedItemsForSummary = orderItems.map(item => ({
-            id: item.bookId,
-            title: item.title,
-            price: item.price, // USD price
-            coverImageUrl: item.coverImageUrl,
-            pdfUrl: item.pdfUrl,
-            dataAiHint: item.dataAiHint,
-        }));
-        sessionStorage.setItem('lastPurchasedItems', JSON.stringify(purchasedItemsForSummary));
-        sessionStorage.setItem('lastPurchasedRegionCode', selectedRegion.code);
-        
-        await clearCart(true); // Clear Firestore cart silently for the logged-in user
-        
-        toast({
-          title: "Mock Checkout Successful!",
-          description: "Your order has been recorded. Redirecting to your order summary...",
-        });
-        router.push(`/order-summary`);
-      } else {
-        toast({
-          title: "Checkout Failed",
-          description: orderResult.message || "Could not process your order. Please try again.",
-          variant: "destructive",
-        });
-        setIsCheckingOut(false);
-      }
-    } catch (error) {
-      console.error("Error during checkout process:", error);
-      toast({
-        title: "Checkout Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      });
-      setIsCheckingOut(false);
-    }
+    router.push('/checkout/payment');
   };
   
   if (authIsLoading || cartIsLoadingContext) { 
@@ -116,7 +84,7 @@ export default function CartPage() {
     );
   }
 
-  if (!currentUser) { 
+  if (!currentUser && !authIsLoading) { 
     return (
       <div className="text-center py-20">
         <ShoppingBag className="mx-auto h-24 w-24 text-muted-foreground mb-6" />
@@ -132,7 +100,7 @@ export default function CartPage() {
   }
 
 
-  if (cartItems.length === 0 && !isCheckingOut) {
+  if (cartItems.length === 0 && !isNavigatingToPayment) {
     return (
       <div className="text-center py-20">
         <ShoppingBag className="mx-auto h-24 w-24 text-muted-foreground mb-6" />
@@ -153,7 +121,7 @@ export default function CartPage() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-headline font-bold text-primary">Your Shopping Cart</h1>
         {cartItems.length > 0 && (
-          <Button variant="outline" onClick={() => clearCart()} className="text-destructive hover:text-destructive border-destructive/50 hover:bg-destructive/10" disabled={isCheckingOut || cartIsLoadingContext}>
+          <Button variant="outline" onClick={() => clearCart()} className="text-destructive hover:text-destructive border-destructive/50 hover:bg-destructive/10" disabled={isNavigatingToPayment || cartIsLoadingContext}>
             <XCircle className="mr-2 h-4 w-4" /> Clear Cart
           </Button>
         )}
@@ -175,7 +143,7 @@ export default function CartPage() {
                 <p className="text-xs text-muted-foreground mt-1">Quantity: 1 (PDF Download)</p>
               </div>
               <div className="flex items-center space-x-3 mt-4 sm:mt-0 sm:ml-auto flex-shrink-0">
-                <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.id)} className="text-destructive hover:text-destructive" disabled={isCheckingOut || cartIsLoadingContext}>
+                <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.id)} className="text-destructive hover:text-destructive" disabled={isNavigatingToPayment || cartIsLoadingContext}>
                   <Trash2 className="h-5 w-5" />
                   <span className="sr-only">Remove item</span>
                 </Button>
@@ -206,12 +174,12 @@ export default function CartPage() {
               <Button 
                 size="lg" 
                 className="w-full bg-accent hover:bg-accent/90 text-accent-foreground mt-4" 
-                onClick={handleCheckout}
-                disabled={isCheckingOut || cartItems.length === 0 || cartIsLoadingContext}
+                onClick={handleProceedToPayment}
+                disabled={isNavigatingToPayment || cartItems.length === 0 || cartIsLoadingContext}
               >
-                {isCheckingOut ? (
+                {isNavigatingToPayment ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Processing...
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Redirecting...
                   </>
                 ) : (
                   'Proceed to Mock Checkout'
@@ -224,3 +192,5 @@ export default function CartPage() {
     </div>
   );
 }
+
+    
