@@ -20,8 +20,6 @@ export default function MyOrdersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  // Removed getRegionByCode and defaultRegion from useRegion() destructuring
-  // const { getRegionByCode: getRegionDataByCode, defaultRegion } = useRegion(); // For formatting price
 
   useEffect(() => {
     if (currentUser) {
@@ -151,8 +149,8 @@ export default function MyOrdersPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <h4 className="font-semibold text-md text-foreground">Items:</h4>
-              {order.items.map((item) => (
-                <div key={item.bookId} className="flex flex-col sm:flex-row items-center gap-4 p-3 border rounded-md bg-background/50">
+              {order.items.map((item, index) => (
+                <div key={item.bookId || index} className="flex flex-col sm:flex-row items-center gap-4 p-3 border rounded-md bg-background/50">
                   <div className="w-20 h-20 sm:w-16 sm:h-16 relative flex-shrink-0 rounded overflow-hidden aspect-square">
                     <Image
                       src={item.coverImageUrl || 'https://placehold.co/100x100.png'}
@@ -185,3 +183,4 @@ export default function MyOrdersPage() {
     </div>
   );
 }
+
