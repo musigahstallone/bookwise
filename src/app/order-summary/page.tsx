@@ -44,15 +44,25 @@ export default function OrderSummaryPage() {
 
     if (itemsJson) {
       try {
-        const items = JSON.parse(itemsJson) as PurchasedItem[]; // Assumes itemsJson matches OrderItemInput structure
+        const items = JSON.parse(itemsJson) as PurchasedItem[]; 
         if (Array.isArray(items) && items.length > 0) {
-          setPurchasedItems(items);
+          // Validate items structure slightly more
+          const validItems = items.filter(item => typeof item.id === 'string' && item.id && typeof item.title === 'string');
+          if (validItems.length !== items.length) {
+            console.warn("Some purchased items had missing IDs or titles after parsing from session storage.");
+          }
+          setPurchasedItems(validItems);
+          if (validItems.length === 0 && items.length > 0) {
+             setError("Order data seems corrupted. Please check your 'My Orders' page for details.");
+          }
+
         } else if (items.length === 0) {
           setError("No items were found for this order summary.");
         } else {
           setError("Invalid order data found in session.");
         }
-        // Clear session storage after use
+        // Clear session storage after attempting to use it, regardless of full success,
+        // to prevent stale data issues on revisits without a new purchase.
         sessionStorage.removeItem('lastPurchasedItems');
         sessionStorage.removeItem('lastPurchasedRegionCode');
       } catch (e) {
@@ -61,6 +71,9 @@ export default function OrderSummaryPage() {
         sessionStorage.removeItem('lastPurchasedItems');
         sessionStorage.removeItem('lastPurchasedRegionCode');
       }
+    } else {
+        // If no itemsJson, it might mean direct navigation or session cleared.
+        // No specific error needed here, the "No Order Details Found" will cover it.
     }
     setIsLoading(false);
   }, []);
@@ -90,6 +103,16 @@ export default function OrderSummaryPage() {
       });
       return;
     }
+    // Ensure pdfUrl is valid before trying to record or download
+    if (!pdfUrl || pdfUrl.includes('placeholder-book.pdf') || pdfUrl.trim() === '') {
+        toast({
+            title: "Download Not Available",
+            description: `The PDF for "${bookTitle}" is currently not available.`,
+            variant: "destructive",
+        });
+        return;
+    }
+
     try {
         const result = await handleRecordDownload(bookId, currentUser.uid);
         if (result.success) {
@@ -145,12 +168,14 @@ export default function OrderSummaryPage() {
         <p className="text-lg text-muted-foreground mb-8 max-w-md">
           It looks like your previous order session has ended, no purchase was completed, or your cart was empty.
         </p>
-        <Button asChild size="lg">
-          <Link href="/shop">Continue Shopping</Link>
-        </Button>
-         <Button asChild size="lg" variant="outline" className="mt-4">
-          <Link href="/my-orders">View Your Past Orders</Link>
-        </Button>
+        <div className="space-y-3 sm:space-y-0 sm:flex sm:justify-center sm:space-x-3">
+            <Button asChild size="lg">
+            <Link href="/shop">Continue Shopping</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="mt-4 sm:mt-0">
+            <Link href="/my-orders">View Your Past Orders</Link>
+            </Button>
+        </div>
       </div>
     );
   }
@@ -173,26 +198,26 @@ export default function OrderSummaryPage() {
           <CardDescription>You purchased {purchasedItems.length} item(s) for a total of {formatPriceInOrderCurrency(totalAmountUSD)}.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {purchasedItems.map((item) => (
-            <div key={item.id} className="flex flex-col sm:flex-row items-center gap-4 p-4 border rounded-lg bg-card/50">
+          {purchasedItems.map((item, index) => (
+            <div key={item.id || index} className="flex flex-col sm:flex-row items-center gap-4 p-4 border rounded-lg bg-card/50">
               <div className="w-24 h-24 sm:w-20 sm:h-20 relative flex-shrink-0 rounded overflow-hidden aspect-square">
                 <Image
-                  src={item.coverImageUrl}
-                  alt={item.title}
+                  src={item.coverImageUrl || 'https://placehold.co/100x100.png'}
+                  alt={item.title || 'Book image'}
                   layout="fill"
                   objectFit="cover"
                   data-ai-hint={item.dataAiHint || 'purchased book'}
                 />
               </div>
               <div className="flex-grow text-center sm:text-left">
-                <h3 className="text-lg font-headline font-semibold text-primary">{item.title}</h3>
-                {/* <p className="text-sm text-muted-foreground">By {item.author}</p> Removed author if not present in PurchasedItem */}
+                <h3 className="text-lg font-headline font-semibold text-primary">{item.title || 'Unknown Title'}</h3>
                 <p className="text-sm text-foreground font-medium">{formatPriceInOrderCurrency(item.price)}</p>
               </div>
               <Button 
                 size="sm" 
                 className="w-full sm:w-auto mt-2 sm:mt-0"
                 onClick={() => onDownloadClick(item.id, item.title, item.pdfUrl)}
+                disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
               >
                   <Download className="mr-2 h-4 w-4" />
                   Download PDF
