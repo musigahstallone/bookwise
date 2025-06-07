@@ -3,9 +3,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+// import Image from 'next/image'; // Removed as per request
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { History, Download, ShoppingBag, Loader2, AlertTriangle, CalendarDays, Hash, DollarSign, Package } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getOrdersByUserIdFromDb, type OrderWithUserDetails } from '@/lib/tracking-service-firebase';
@@ -45,13 +45,13 @@ export default function MyOrdersPage() {
 
   const onDownloadClick = async (bookId: string, bookTitle: string, pdfUrl: string) => {
     if (!currentUser) {
-      toast({ title: "Authentication Error", description: "You must be logged in.", variant: "destructive" });
+      toast({ title: "Authentication Error", description: "You must be logged in to download.", variant: "destructive" });
       return;
     }
     if (!pdfUrl || pdfUrl.includes('placeholder-book.pdf') || pdfUrl.trim() === '') {
         toast({
             title: "Download Not Available",
-            description: `The PDF for "${bookTitle}" is currently not available.`,
+            description: `The PDF for "${bookTitle}" is currently not available. Please contact support if you believe this is an error.`,
             variant: "destructive",
         });
         return;
@@ -59,14 +59,14 @@ export default function MyOrdersPage() {
     try {
       const result = await handleRecordDownload(bookId, currentUser.uid);
       if (result.success) {
-        toast({ title: "Download Recorded", description: `Download of "${bookTitle}" logged.` });
+        toast({ title: "Download Logged", description: `Preparing download for "${bookTitle}".` });
+        window.location.href = pdfUrl;
       } else {
-        toast({ title: "Logging Failed", description: result.message, variant: "destructive" });
+        toast({ title: "Download Denied", description: result.message, variant: "destructive" });
       }
     } catch (e: any) {
-      toast({ title: "Logging Error", description: e.message, variant: "destructive" });
+      toast({ title: "Download Error", description: e.message || "An unexpected error occurred.", variant: "destructive" });
     }
-    window.location.href = pdfUrl;
   };
 
   const formatOrderPrice = (totalAmountUSD: number, regionCode: string, currencySymbolOrder: string) => {
@@ -169,35 +169,26 @@ export default function MyOrdersPage() {
                   {order.status}
                </Badge>
             </CardHeader>
-            <CardContent className="p-4 space-y-4">
-              <h4 className="font-semibold text-md text-foreground -mb-2">Items Purchased:</h4>
+            <CardContent className="p-4 space-y-3">
+              <h4 className="font-semibold text-md text-foreground -mb-1">Items Purchased:</h4>
               {order.items.map((item, index) => (
-                <div key={item.bookId || index} className="pt-4">
-                  {index > 0 && <Separator className="mb-4" />}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                    <div className="w-24 h-32 sm:w-20 sm:h-[115px] relative flex-shrink-0 rounded overflow-hidden shadow-sm border aspect-[2/3]">
-                      <Image
-                        src={item.coverImageUrl || 'https://placehold.co/80x120.png'}
-                        alt={item.title}
-                        layout="fill"
-                        objectFit="cover"
-                        data-ai-hint={item.dataAiHint || 'ordered book cover'}
-                      />
-                    </div>
+                <div key={item.bookId || index} className="pt-3">
+                  {index > 0 && <Separator className="mb-3" />}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div className="flex-grow">
                       <Link href={`/books/${item.bookId}`} className="hover:underline">
-                        <h3 className="text-lg font-headline font-semibold text-primary">{item.title}</h3>
+                        <h3 className="text-md font-headline font-semibold text-primary">{item.title}</h3>
                       </Link>
-                      <p className="text-sm text-foreground mt-1">
+                      <p className="text-sm text-muted-foreground">
                         Price Paid: {formatOrderPrice(item.price, order.regionCode, order.currencyCode.toUpperCase())}
                       </p>
                     </div>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="w-full sm:w-auto mt-3 sm:mt-0 self-center sm:self-end"
+                      className="w-full sm:w-auto mt-2 sm:mt-0"
                       onClick={() => onDownloadClick(item.bookId, item.title, item.pdfUrl)}
-                      disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf')}
+                      disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
                     >
                       <Download className="mr-2 h-4 w-4" />
                       Download PDF
@@ -212,5 +203,3 @@ export default function MyOrdersPage() {
     </div>
   );
 }
-
-    

@@ -3,22 +3,20 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+// import Image from 'next/image'; // Removed as per request
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { CheckCircle, Download, ShoppingBag, Loader2, AlertTriangle } from 'lucide-react';
+import { CheckCircle, Download, ShoppingBag, Loader2, AlertTriangle, ArrowRight } from 'lucide-react';
 import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData';
 import { useAuth } from '@/contexts/AuthContext';
 import { handleRecordDownload } from '@/lib/actions/trackingActions';
 import { useToast } from '@/hooks/use-toast';
 
-// Interface for items displayed on this page, derived from OrderItemInput
 interface PurchasedItem {
   id: string; // bookId
   title: string;
-  // author: string; // Author is not part of OrderItemInput, remove if not available
   price: number;
-  coverImageUrl: string;
+  coverImageUrl: string; // Kept for data model consistency, but not displayed
   pdfUrl: string;
   dataAiHint?: string;
 }
@@ -34,7 +32,7 @@ export default function OrderSummaryPage() {
   useEffect(() => {
     const itemsJson = sessionStorage.getItem('lastPurchasedItems');
     const regionCodeJson = sessionStorage.getItem('lastPurchasedRegionCode');
-    
+
     if (regionCodeJson) {
         const region = getRegionByCode(regionCodeJson);
         if (region) {
@@ -44,9 +42,8 @@ export default function OrderSummaryPage() {
 
     if (itemsJson) {
       try {
-        const items = JSON.parse(itemsJson) as PurchasedItem[]; 
+        const items = JSON.parse(itemsJson) as PurchasedItem[];
         if (Array.isArray(items) && items.length > 0) {
-          // Validate items structure slightly more
           const validItems = items.filter(item => typeof item.id === 'string' && item.id && typeof item.title === 'string');
           if (validItems.length !== items.length) {
             console.warn("Some purchased items had missing IDs or titles after parsing from session storage.");
@@ -55,14 +52,11 @@ export default function OrderSummaryPage() {
           if (validItems.length === 0 && items.length > 0) {
              setError("Order data seems corrupted. Please check your 'My Orders' page for details.");
           }
-
         } else if (items.length === 0) {
           setError("No items were found for this order summary.");
         } else {
           setError("Invalid order data found in session.");
         }
-        // Clear session storage after attempting to use it, regardless of full success,
-        // to prevent stale data issues on revisits without a new purchase.
         sessionStorage.removeItem('lastPurchasedItems');
         sessionStorage.removeItem('lastPurchasedRegionCode');
       } catch (e) {
@@ -71,9 +65,6 @@ export default function OrderSummaryPage() {
         sessionStorage.removeItem('lastPurchasedItems');
         sessionStorage.removeItem('lastPurchasedRegionCode');
       }
-    } else {
-        // If no itemsJson, it might mean direct navigation or session cleared.
-        // No specific error needed here, the "No Order Details Found" will cover it.
     }
     setIsLoading(false);
   }, []);
@@ -103,27 +94,26 @@ export default function OrderSummaryPage() {
       });
       return;
     }
-    // Ensure pdfUrl is valid before trying to record or download
     if (!pdfUrl || pdfUrl.includes('placeholder-book.pdf') || pdfUrl.trim() === '') {
         toast({
             title: "Download Not Available",
-            description: `The PDF for "${bookTitle}" is currently not available.`,
+            description: `The PDF for "${bookTitle}" is currently not available. Please contact support.`,
             variant: "destructive",
         });
         return;
     }
-
     try {
         const result = await handleRecordDownload(bookId, currentUser.uid);
         if (result.success) {
           toast({
-            title: "Download Recorded",
-            description: `Your download of "${bookTitle}" has been logged.`,
+            title: "Download Logged",
+            description: `Preparing download for "${bookTitle}".`,
           });
+          window.location.href = pdfUrl;
         } else {
           toast({
-            title: "Download Logging Failed",
-            description: result.message || `Could not log download for "${bookTitle}".`,
+            title: "Download Denied",
+            description: result.message, // Message from server action (e.g., rate limit)
             variant: "destructive",
           });
         }
@@ -134,8 +124,6 @@ export default function OrderSummaryPage() {
             variant: "destructive",
         });
     }
-    // Trigger download
-    window.location.href = pdfUrl; 
   };
 
   if (isLoading || authIsLoading) {
@@ -166,7 +154,7 @@ export default function OrderSummaryPage() {
         <ShoppingBag className="h-24 w-24 text-muted-foreground mb-6" />
         <h1 className="text-3xl font-headline font-bold text-primary mb-4">No Order Details Found</h1>
         <p className="text-lg text-muted-foreground mb-8 max-w-md">
-          It looks like your previous order session has ended, no purchase was completed, or your cart was empty.
+          It looks like your previous order session has ended or no purchase was completed.
         </p>
         <div className="space-y-3 sm:space-y-0 sm:flex sm:justify-center sm:space-x-3">
             <Button asChild size="lg">
@@ -183,39 +171,30 @@ export default function OrderSummaryPage() {
   const totalAmountUSD = purchasedItems.reduce((sum, item) => sum + item.price, 0);
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
-      <div className="text-center mb-10">
-        <CheckCircle className="h-20 w-20 text-green-500 mx-auto mb-4" />
-        <h1 className="text-4xl font-headline font-bold text-primary">Thank You For Your Purchase!</h1>
-        <p className="text-lg text-muted-foreground mt-2">
-          Your order has been successfully processed. You can download your books below.
-        </p>
-      </div>
-
-      <Card className="shadow-xl mb-8">
-        <CardHeader>
-          <CardTitle className="text-2xl font-headline">Order Summary</CardTitle>
-          <CardDescription>You purchased {purchasedItems.length} item(s) for a total of {formatPriceInOrderCurrency(totalAmountUSD)}.</CardDescription>
+    <div className="max-w-2xl mx-auto py-10 px-4">
+      <Card className="shadow-xl border-green-500 border-2">
+        <CardHeader className="text-center bg-green-50 py-8">
+          <CheckCircle className="h-20 w-20 text-green-600 mx-auto mb-4" />
+          <CardTitle className="text-3xl sm:text-4xl font-headline text-green-700">Thank You For Your Purchase!</CardTitle>
+          <CardDescription className="text-md sm:text-lg text-muted-foreground mt-2">
+            Your order has been successfully processed. You can download your books below or find them anytime in <Link href="/my-orders" className="text-primary hover:underline font-semibold">My Orders</Link>.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="p-6 space-y-4">
+            <div className="text-center mb-6">
+                <p className="text-lg font-medium text-foreground">
+                    Total Amount: {formatPriceInOrderCurrency(totalAmountUSD)} ({purchasedItems.length} item{purchasedItems.length === 1 ? '' : 's'})
+                </p>
+            </div>
           {purchasedItems.map((item, index) => (
-            <div key={item.id || index} className="flex flex-col sm:flex-row items-center gap-4 p-4 border rounded-lg bg-card/50">
-              <div className="w-24 h-24 sm:w-20 sm:h-20 relative flex-shrink-0 rounded overflow-hidden aspect-square">
-                <Image
-                  src={item.coverImageUrl || 'https://placehold.co/100x100.png'}
-                  alt={item.title || 'Book image'}
-                  layout="fill"
-                  objectFit="cover"
-                  data-ai-hint={item.dataAiHint || 'purchased book'}
-                />
-              </div>
+            <div key={item.id || index} className="flex flex-col sm:flex-row justify-between items-center gap-3 p-4 border rounded-lg bg-card/50 shadow-sm">
               <div className="flex-grow text-center sm:text-left">
-                <h3 className="text-lg font-headline font-semibold text-primary">{item.title || 'Unknown Title'}</h3>
-                <p className="text-sm text-foreground font-medium">{formatPriceInOrderCurrency(item.price)}</p>
+                <h3 className="text-md font-headline font-semibold text-primary">{item.title || 'Unknown Title'}</h3>
+                <p className="text-sm text-muted-foreground font-medium">{formatPriceInOrderCurrency(item.price)}</p>
               </div>
-              <Button 
-                size="sm" 
-                className="w-full sm:w-auto mt-2 sm:mt-0"
+              <Button
+                size="sm"
+                className="w-full sm:w-auto mt-2 sm:mt-0 bg-accent hover:bg-accent/90 text-accent-foreground"
                 onClick={() => onDownloadClick(item.id, item.title, item.pdfUrl)}
                 disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
               >
@@ -227,12 +206,14 @@ export default function OrderSummaryPage() {
         </CardContent>
       </Card>
 
-      <div className="text-center space-y-3 sm:space-y-0 sm:flex sm:justify-center sm:space-x-3">
+      <div className="text-center mt-8 space-y-3 sm:space-y-0 sm:flex sm:justify-center sm:gap-4">
+        <Button asChild size="lg">
+          <Link href="/my-orders" className="flex items-center">
+            Go to My Orders <ArrowRight className="ml-2 h-5 w-5" />
+          </Link>
+        </Button>
         <Button asChild size="lg" variant="outline">
           <Link href="/shop">Continue Shopping</Link>
-        </Button>
-        <Button asChild size="lg">
-          <Link href="/my-orders">View Your Orders</Link>
         </Button>
       </div>
     </div>
