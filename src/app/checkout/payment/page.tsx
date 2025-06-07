@@ -7,21 +7,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Loader2, CreditCard, Smartphone, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
-import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData'; // Import from regionData
+import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData';
 import { handleCreateOrder, type OrderItemInput } from '@/lib/actions/trackingActions';
-import type { Book } from '@/data/books'; 
+import type { Book } from '@/data/books';
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
 
 interface CheckoutData {
-  cartItems: Book[]; 
+  cartItems: Book[];
   totalAmountUSD: number;
   selectedRegionCode: string;
-  currencyCode: string; 
+  currencyCode: string;
   itemCount: number;
 }
 
@@ -30,20 +29,27 @@ export default function MockPaymentPage() {
   const { toast } = useToast();
   const { currentUser, isLoading: authIsLoading } = useAuth();
   const { clearCart } = useCart();
-  // Removed getRegionByCode and defaultRegion from useRegion, will use direct import
 
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'mpesa' | null>(null);
-  const [isLoading, setIsLoading] = useState(true); 
+  const [isLoading, setIsLoading] = useState(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const [mpesaNumber, setMpesaNumber] = useState('');
+
+  // Card details state
   const [cardNumber, setCardNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const [cvv, setCvv] = useState('');
+  const [isCardNumberValid, setIsCardNumberValid] = useState(false);
+  const [isExpiryDateValid, setIsExpiryDateValid] = useState(false);
+  const [isCvvValid, setIsCvvValid] = useState(false);
 
-  const [displayRegion, setDisplayRegion] = useState<Region>(defaultRegion); // Initialize with defaultRegion from regionData
+  // M-Pesa state
+  const [mpesaNumber, setMpesaNumber] = useState('');
+  const [isMpesaNumberValid, setIsMpesaNumberValid] = useState(false);
+  const [mpesaAmountKES, setMpesaAmountKES] = useState('');
+
+  const [displayRegion, setDisplayRegion] = useState<Region>(defaultRegion);
 
   useEffect(() => {
     const dataString = sessionStorage.getItem('bookwiseCheckoutData');
@@ -51,8 +57,24 @@ export default function MockPaymentPage() {
       try {
         const parsedData: CheckoutData = JSON.parse(dataString);
         setCheckoutData(parsedData);
-        const region = getRegionByCode(parsedData.selectedRegionCode) || defaultRegion; // Use imported getRegionByCode & defaultRegion
+        const region = getRegionByCode(parsedData.selectedRegionCode) || defaultRegion;
         setDisplayRegion(region);
+
+        if (parsedData.totalAmountUSD) {
+            const kesRegionDetails = getRegionByCode('KE'); // Assuming 'KE' is the code for Kenya
+            if (kesRegionDetails) {
+                const amountInKES = parsedData.totalAmountUSD * kesRegionDetails.conversionRateToUSD;
+                const kesSymbol = kesRegionDetails.currencySymbol;
+                let formattedKESPrice;
+                if (Math.abs(amountInKES - Math.round(amountInKES)) < 0.005) {
+                    formattedKESPrice = Math.round(amountInKES).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                } else {
+                    formattedKESPrice = amountInKES.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+                setMpesaAmountKES(`${kesSymbol} ${formattedKESPrice}`);
+            }
+        }
+
       } catch (e) {
         console.error("Error parsing checkout data from session storage:", e);
         setError("Could not load checkout details. Please try again from your cart.");
@@ -61,7 +83,7 @@ export default function MockPaymentPage() {
       setError("No checkout information found. Please start from your cart.");
     }
     setIsLoading(false);
-  }, []); // Removed getRegionByCode and defaultRegion from deps as they are stable imports
+  }, []);
 
   const formatPriceInOrderCurrency = (usdPrice: number): string => {
     const convertedPrice = usdPrice * displayRegion.conversionRateToUSD;
@@ -75,8 +97,64 @@ export default function MockPaymentPage() {
     } else {
          formattedPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    return `${displayRegion.currencySymbol}${formattedPrice}`;
+    return `${displayRegion.currencySymbol} ${formattedPrice}`;
   };
+
+  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value.replace(/\D/g, ''); // Remove non-digits
+    const limitedValue = rawValue.slice(0, 16); // Limit to 16 digits
+
+    let formattedValue = '';
+    for (let i = 0; i < limitedValue.length; i++) {
+      if (i > 0 && i % 4 === 0) {
+        formattedValue += ' ';
+      }
+      formattedValue += limitedValue[i];
+    }
+    setCardNumber(formattedValue);
+    setIsCardNumberValid(limitedValue.length === 16);
+  };
+
+  const handleExpiryDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let rawValue = e.target.value.replace(/\D/g, ''); // Remove non-digits
+    let formattedValue = rawValue;
+
+    if (rawValue.length > 2) {
+      formattedValue = rawValue.slice(0, 2) + '/' + rawValue.slice(2, 4);
+    } else if (rawValue.length <=2 && expiryDate.endsWith('/') && e.nativeEvent.inputType === 'deleteContentBackward') {
+        // handle backspace over '/'
+         formattedValue = rawValue.slice(0, rawValue.length);
+    }
+    
+    if (formattedValue.length > 5) {
+        formattedValue = formattedValue.slice(0,5);
+    }
+
+    setExpiryDate(formattedValue);
+    // Basic validation: MM/YY format, MM between 01-12
+    const parts = formattedValue.split('/');
+    const month = parseInt(parts[0], 10);
+    const year = parseInt(parts[1], 10);
+    const currentYearShort = new Date().getFullYear() % 100;
+    const isValidMonth = month >= 1 && month <= 12;
+    const isValidYear = parts[1]?.length === 2 && year >= currentYearShort; // Simple check: year is current or future
+    setIsExpiryDateValid(formattedValue.length === 5 && isValidMonth && isValidYear);
+  };
+
+  const handleCvvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value.replace(/\D/g, ''); // Remove non-digits
+    const limitedValue = rawValue.slice(0, 3); // Limit to 3 digits
+    setCvv(limitedValue);
+    setIsCvvValid(limitedValue.length === 3);
+  };
+  
+  const handleMpesaNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, ''); // Allow only digits
+    const limitedValue = value.slice(0,10); // Kenyan numbers are 10 digits (e.g. 07xxxxxxxx or 01xxxxxxxx)
+    setMpesaNumber(limitedValue);
+    setIsMpesaNumberValid(/^(07|01)\d{8}$/.test(limitedValue));
+  };
+
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,7 +171,7 @@ export default function MockPaymentPage() {
     const orderItems: OrderItemInput[] = checkoutData.cartItems.map(item => ({
         bookId: item.id,
         title: item.title,
-        price: item.price, 
+        price: item.price,
         coverImageUrl: item.coverImageUrl,
         pdfUrl: item.pdfUrl,
         dataAiHint: item.dataAiHint || 'book cover',
@@ -110,8 +188,8 @@ export default function MockPaymentPage() {
       );
 
       if (orderResult.success && orderResult.orderId) {
-        await clearCart(true); 
-        sessionStorage.removeItem('bookwiseCheckoutData'); 
+        await clearCart(true);
+        sessionStorage.removeItem('bookwiseCheckoutData');
 
         const purchasedItemsForSummary = orderItems.map(item => ({
             id: item.bookId,
@@ -122,7 +200,7 @@ export default function MockPaymentPage() {
             dataAiHint: item.dataAiHint,
         }));
         sessionStorage.setItem('lastPurchasedItems', JSON.stringify(purchasedItemsForSummary));
-        sessionStorage.setItem('lastPurchasedRegionCode', checkoutData.selectedRegionCode); 
+        sessionStorage.setItem('lastPurchasedRegionCode', checkoutData.selectedRegionCode);
         
         toast({
           title: "Mock Payment Successful!",
@@ -147,7 +225,7 @@ export default function MockPaymentPage() {
       setIsProcessingPayment(false);
     }
   };
-  
+
   if (authIsLoading || isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -159,7 +237,7 @@ export default function MockPaymentPage() {
 
   if (error || !checkoutData) {
     return (
-      <ErrorDisplay 
+      <ErrorDisplay
         title="Payment Error"
         message={error || "Could not load payment details. Please return to your cart."}
         showHomeButton={false}
@@ -167,10 +245,10 @@ export default function MockPaymentPage() {
       />
     );
   }
-  
+
   if (!currentUser) {
      return (
-        <ErrorDisplay 
+        <ErrorDisplay
             title="Authentication Required"
             message="You need to be logged in to complete the payment."
             retryAction={() => router.push(`/login?redirectUrl=/checkout/payment`)}
@@ -204,16 +282,16 @@ export default function MockPaymentPage() {
           <div className="space-y-2">
             <Label className="text-base">Choose Payment Method:</Label>
             <div className="flex gap-3">
-              <Button 
-                variant={paymentMethod === 'card' ? 'default' : 'outline'} 
+              <Button
+                variant={paymentMethod === 'card' ? 'default' : 'outline'}
                 onClick={() => setPaymentMethod('card')}
                 className="flex-1"
                 disabled={isProcessingPayment}
               >
                 <CreditCard className="mr-2 h-5 w-5" /> Credit/Debit Card
               </Button>
-              <Button 
-                variant={paymentMethod === 'mpesa' ? 'default' : 'outline'} 
+              <Button
+                variant={paymentMethod === 'mpesa' ? 'default' : 'outline'}
                 onClick={() => setPaymentMethod('mpesa')}
                 className="flex-1"
                 disabled={isProcessingPayment}
@@ -228,19 +306,48 @@ export default function MockPaymentPage() {
               <h4 className="text-md font-semibold">Enter Card Details (Mock)</h4>
               <div>
                 <Label htmlFor="cardNumber">Card Number</Label>
-                <Input id="cardNumber" type="text" placeholder="0000 0000 0000 0000" value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} disabled={isProcessingPayment} />
+                <Input 
+                  id="cardNumber" 
+                  type="text" 
+                  placeholder="0000 0000 0000 0000" 
+                  value={cardNumber} 
+                  onChange={handleCardNumberChange} 
+                  disabled={isProcessingPayment} 
+                  maxLength={19} // 16 digits + 3 spaces
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="expiryDate">Expiry Date</Label>
-                  <Input id="expiryDate" type="text" placeholder="MM/YY" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} disabled={isProcessingPayment} />
+                  <Input 
+                    id="expiryDate" 
+                    type="text" 
+                    placeholder="MM/YY" 
+                    value={expiryDate} 
+                    onChange={handleExpiryDateChange} 
+                    disabled={isProcessingPayment}
+                    maxLength={5} // MM/YY
+                   />
                 </div>
                 <div>
                   <Label htmlFor="cvv">CVV</Label>
-                  <Input id="cvv" type="text" placeholder="123" value={cvv} onChange={(e) => setCvv(e.target.value)} disabled={isProcessingPayment} />
+                  <Input 
+                    id="cvv" 
+                    type="text" 
+                    placeholder="123" 
+                    value={cvv} 
+                    onChange={handleCvvChange} 
+                    disabled={isProcessingPayment}
+                    maxLength={3}
+                  />
                 </div>
               </div>
-              <Button type="submit" className="w-full" disabled={isProcessingPayment || !cardNumber || !expiryDate || !cvv}>
+              <p className="text-xs text-muted-foreground">Card payments are processed in {displayRegion.currencyCode}.</p>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isProcessingPayment || !isCardNumberValid || !isExpiryDateValid || !isCvvValid}
+              >
                 {isProcessingPayment ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CreditCard className="mr-2 h-5 w-5" />}
                 Pay {formatPriceInOrderCurrency(checkoutData.totalAmountUSD)} with Card
               </Button>
@@ -252,19 +359,32 @@ export default function MockPaymentPage() {
               <h4 className="text-md font-semibold">M-Pesa Payment (Mock)</h4>
               <div>
                 <Label htmlFor="mpesaNumber">M-Pesa Number</Label>
-                <Input id="mpesaNumber" type="tel" placeholder="e.g., 0712345678" value={mpesaNumber} onChange={(e) => setMpesaNumber(e.target.value)} disabled={isProcessingPayment} />
+                <Input 
+                    id="mpesaNumber" 
+                    type="tel" 
+                    placeholder="e.g., 0712345678" 
+                    value={mpesaNumber} 
+                    onChange={handleMpesaNumberChange} 
+                    disabled={isProcessingPayment} 
+                    maxLength={10}
+                />
               </div>
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700">
-                <AlertTriangle className="inline h-4 w-4 mr-1 mb-0.5" /> 
+                <p className="font-medium">Please pay: {mpesaAmountKES}</p>
+                <AlertTriangle className="inline h-4 w-4 mr-1 mb-0.5" />
                 You'll receive an STK push. Ensure it's from <strong className="font-medium">BOOKWISE STORES GLOBAL</strong> before entering your M-Pesa PIN.
               </div>
-              <Button type="submit" className="w-full" disabled={isProcessingPayment || !mpesaNumber}>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isProcessingPayment || !isMpesaNumberValid}
+              >
                 {isProcessingPayment ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Smartphone className="mr-2 h-5 w-5" />}
-                Pay {formatPriceInOrderCurrency(checkoutData.totalAmountUSD)} with M-Pesa
+                Pay {mpesaAmountKES} with M-Pesa
               </Button>
             </form>
           )}
-          
+
           {isProcessingPayment && (
             <div className="text-center p-4">
               <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
