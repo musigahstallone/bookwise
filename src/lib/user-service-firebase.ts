@@ -27,6 +27,15 @@ export const createUserDocumentInDb = async (
     throw new Error("Firebase Project ID not configured.");
   }
   const userDocRef = doc(db, USERS_COLLECTION, uid); 
+  // explain the line above:
+  // This line creates a reference to a Firestore document in the 'users' collection with the specified UID.
+  // If the document does not exist, it will be created when we set data to it.
+  // If the document already exists, it will be updated with the new data we provide.
+  // The 'uid' is used as the document ID, which is a common practice for user documents in Firestore.
+  // The 'uid' is the unique identifier for the user, typically the Firebase Auth UID.
+  // The 'email' and 'name' are used to populate the user's data in Firestore.
+  // The 'createdAt' field is set to the current date and time when the user document is created.
+
   const newUser: User = {
     id: uid, 
     email: email.toLowerCase(),
@@ -37,7 +46,13 @@ export const createUserDocumentInDb = async (
 
   const dataToSave = {
     ...newUser,
-    createdAt: Timestamp.fromDate(newUser.createdAt)
+    // createdAt: Timestamp.fromDate(newUser.createdAt as Date), // Ensure createdAt is a Timestamp
+    // If you want to keep the Date type, you can use:
+    // createdAt: newUser.createdAt instanceof Date ? Timestamp.fromDate(newUser.createdAt) : newUser.createdAt,
+    // Alternatively, if you want to ensure createdAt is always a Timestamp:
+    // createdAt: newUser.createdAt ? Timestamp.fromDate(newUser.createdAt) : Timestamp.now(),
+    createdAt: Timestamp.fromDate(newUser.createdAt!) // explaining the use of '!' to assert that createdAt is not null or undefined
+    // createdAt: Timestamp.fromDate(newUser.createdAt!)
   };
   
   await setDoc(userDocRef, dataToSave);

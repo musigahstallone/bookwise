@@ -3,8 +3,9 @@ export interface User {
   id: string; // Firebase Auth UID will be used here
   email: string;
   name: string;
-  role: 'admin' | 'user'; // Simplified roles
-  createdAt?: Date; 
+  role: "admin" | "user"; // Simplified roles
+  createdAt?: Date;
+  // createdAt: Date;
 }
 
 // This mockUsers array is NO LONGER USED for authentication or direct seeding via button.

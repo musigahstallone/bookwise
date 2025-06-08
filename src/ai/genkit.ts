@@ -1,6 +1,6 @@
-
-import {genkit, type GenkitPlugin} from 'genkit';
-import {googleAI} from '@genkit-ai/googleai';
+import { genkit } from "genkit";
+import { googleAI } from "@genkit-ai/googleai";
+import { GenkitPlugin } from "genkit/plugin";
 
 const plugins: GenkitPlugin[] = [];
 const genkitIsConfigured = !!process.env.GOOGLE_API_KEY;
@@ -9,9 +9,10 @@ if (genkitIsConfigured) {
   plugins.push(googleAI());
 } else {
   // Log a warning if the key is missing, visible in build logs or server logs
-  if (typeof window === 'undefined') { // Server-side check
+  if (typeof window === "undefined") {
+    // Server-side check
     console.warn(
-      'WARNING: GOOGLE_API_KEY is not set. AI features requiring Google AI will not be available. Please set this environment variable.'
+      "WARNING: GOOGLE_API_KEY is not set. AI features requiring Google AI will not be available. Please set this environment variable."
     );
   }
 }

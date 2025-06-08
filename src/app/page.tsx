@@ -147,16 +147,16 @@ export default async function LandingPage() {
               Explore Our Latest Arrivals
             </h2>
             {!firebaseConfigured && (
-                <div className="text-center p-4 mb-6 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
-                    <p className="font-bold flex items-center justify-center"><AlertTriangle className="mr-2 h-5 w-5" /> Firebase Not Configured</p>
-                    <p>Book previews cannot be loaded. Please check your <code>.env.local</code> settings.</p>
-                </div>
+              <div className="text-center p-4 mb-6 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
+                <p className="font-bold flex items-center justify-center"><AlertTriangle className="mr-2 h-5 w-5" /> Firebase Not Configured</p>
+                <p>Book previews cannot be loaded. Please check your <code>.env.local</code> settings.</p>
+              </div>
             )}
             {firebaseConfigured && fetchError && (
-                <div className="text-center p-4 mb-6 bg-destructive/10 border-l-4 border-destructive text-destructive-foreground rounded-md">
-                    <p className="font-bold flex items-center justify-center"><AlertTriangle className="mr-2 h-5 w-5" /> Error Loading Books</p>
-                    <p>{fetchError}</p>
-                </div>
+              <div className="text-center p-4 mb-6 bg-destructive/10 border-l-4 border-destructive text-destructive-foreground rounded-md">
+                <p className="font-bold flex items-center justify-center"><AlertTriangle className="mr-2 h-5 w-5" /> Error Loading Books</p>
+                <p>{fetchError}</p>
+              </div>
             )}
             {firebaseConfigured && !fetchError && previewBooks.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -166,7 +166,7 @@ export default async function LandingPage() {
               </div>
             )}
             {firebaseConfigured && !fetchError && previewBooks.length === 0 && (
-                 <p className="text-center text-muted-foreground">No books to display currently. Try seeding the database in the admin panel.</p>
+              <p className="text-center text-muted-foreground">No books to display currently. Try seeding the database in the admin panel.</p>
             )}
             <div className="text-center mt-12">
               <Button asChild size="lg" variant="outline">
@@ -182,7 +182,7 @@ export default async function LandingPage() {
             <h2 className="text-3xl font-headline font-semibold text-center mb-12 text-primary">
               Loved by Readers Like You
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 rounded-[24px]">
               {testimonials.map((testimonial, index) => (
                 <Card key={index} className="shadow-lg hover:shadow-xl transition-shadow">
                   <CardContent className="pt-6">
@@ -204,7 +204,7 @@ export default async function LandingPage() {
         </section>
 
         {/* 6. Call-to-Action (Mid-Page) */}
-        <section className="py-20 bg-primary text-primary-foreground">
+        <section className="py-20 bg-primary text-primary-foreground rounded-[24px]">
           <div className="container mx-auto px-4 text-center">
             <h2 className="text-4xl font-headline font-bold mb-6">
               Buy a Book. Download in Seconds. Read for a Lifetime.
