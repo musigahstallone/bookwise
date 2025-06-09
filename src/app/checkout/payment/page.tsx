@@ -44,6 +44,12 @@ export default function PaymentPage() {
     if (dataString) {
       try {
         const parsedData: CheckoutData = JSON.parse(dataString);
+        if (!parsedData.cartItems || parsedData.cartItems.length === 0) {
+          setError("No items in cart for checkout. Please return to your cart.");
+          setCheckoutData(null);
+          setIsLoadingPage(false);
+          return;
+        }
         setCheckoutData(parsedData);
         const regionForDisplay = getRegionByCode(parsedData.selectedRegionCode) || defaultRegion;
         setDisplayRegion(regionForDisplay);
@@ -51,23 +57,22 @@ export default function PaymentPage() {
         const convertedAmount = parsedData.totalAmountUSD * regionForDisplay.conversionRateToUSD;
         let finalDisplayAmount;
          if (regionForDisplay.currencyCode === 'KES') {
-            if (Math.abs(convertedAmount - Math.round(convertedAmount)) < 0.005) { 
-                finalDisplayAmount = Math.round(convertedAmount);
-            } else {
-                finalDisplayAmount = parseFloat(convertedAmount.toFixed(2));
-            }
+            // For KES, round to nearest whole number for display, as M-Pesa typically deals with whole shillings.
+            // The actual amount sent to M-Pesa API might be 1 for sandbox.
+            finalDisplayAmount = Math.round(convertedAmount);
         } else {
             finalDisplayAmount = parseFloat(convertedAmount.toFixed(2));
         }
         setAmountInSelectedCurrency(finalDisplayAmount);
 
-
       } catch (e) {
         console.error("Error parsing checkout data from session storage:", e);
         setError("Could not load checkout details. Please try again from your cart.");
+        setCheckoutData(null);
       }
     } else {
       setError("No checkout information found. Please start from your cart.");
+      setCheckoutData(null);
     }
     setIsLoadingPage(false);
   }, []);
@@ -76,11 +81,8 @@ export default function PaymentPage() {
   const formatPriceInOrderCurrency = (amount: number, region: Region): string => {
     let formattedPrice;
     if (region.currencyCode === 'KES') {
-       if (Math.abs(amount - Math.round(amount)) < 0.005) {
-            formattedPrice = Math.round(amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-        } else {
-            formattedPrice = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        }
+       // Display KES as a whole number
+        formattedPrice = Math.round(amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     } else {
         formattedPrice = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
@@ -95,11 +97,12 @@ export default function PaymentPage() {
         description: "Missing checkout data or user not logged in.",
         variant: "destructive"
       });
+      setIsProcessingOrder(false);
       return;
     }
 
     setIsProcessingOrder(true);
-    toast({ title: "Finalizing Order...", description: "Please wait a moment." });
+    toast({ title: "Payment Confirmed", description: "Finalizing your order, please wait..." });
 
     const orderItems: OrderItemInput[] = checkoutData.cartItems.map(item => ({
       bookId: item.id,
@@ -126,29 +129,27 @@ export default function PaymentPage() {
         await clearCart(true); 
         sessionStorage.removeItem('bookwiseCheckoutData');
         
-        // No longer saving data for /order-summary
-        // sessionStorage.removeItem('lastPurchasedItems'); 
-        // sessionStorage.removeItem('lastPurchasedRegionCode');
-
         toast({
           title: "Payment Successful!",
           description: "Order Received! Your order has been processed. You can view and download your purchased books on the 'My Orders' page.",
-          duration: 7000,
+          duration: 8000,
         });
-        router.push(`/my-orders`); // Redirect to my-orders page
+        router.push(`/my-orders`);
       } else {
         toast({
           title: "Order Creation Failed",
-          description: orderResult.message || "Could not process your order after payment. Please contact support with your payment ID.",
+          description: orderResult.message || "Could not process your order after payment. Payment ID: " + paymentId + ". Please contact support.",
           variant: "destructive",
+          duration: 10000,
         });
       }
     } catch (err) {
       console.error("Error during order creation:", err);
       toast({
         title: "Checkout Error",
-        description: "An unexpected error occurred while finalizing your order. Please contact support.",
+        description: "An unexpected error occurred while finalizing your order. Payment ID: " + paymentId + ". Please contact support.",
         variant: "destructive",
+        duration: 10000,
       });
     } finally {
       setIsProcessingOrder(false);
@@ -158,7 +159,7 @@ export default function PaymentPage() {
 
   if (authIsLoading || isLoadingPage) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <p className="ml-4 text-lg text-muted-foreground">Loading Payment Page...</p>
       </div>
@@ -167,56 +168,62 @@ export default function PaymentPage() {
 
   if (error || !checkoutData) {
     return (
-      <ErrorDisplay
-        title="Payment Page Error"
-        message={error || "Could not load payment details. Please return to your cart."}
-        showHomeButton={false}
-        retryAction={() => router.push('/cart')}
-        className="max-w-2xl mx-auto"
-      />
+      <div className="container max-w-2xl mx-auto py-8 px-4">
+        <ErrorDisplay
+            title="Payment Page Error"
+            message={error || "Could not load payment details. Please return to your cart."}
+            showHomeButton={false}
+            retryAction={() => router.push('/cart')}
+            className="max-w-2xl mx-auto"
+        />
+      </div>
     );
   }
 
   if (!currentUser) {
-    return (
-      <ErrorDisplay
-        title="Authentication Required"
-        message="You need to be logged in to complete the payment."
-        retryAction={() => router.push(`/login?redirectUrl=/checkout/payment`)}
-        showHomeButton={false}
-        className="max-w-2xl mx-auto"
-      />
+     return (
+      <div className="container max-w-2xl mx-auto py-8 px-4">
+        <ErrorDisplay
+            title="Authentication Required"
+            message="You need to be logged in to complete the payment."
+            retryAction={() => router.push(`/login?redirectUrl=/checkout/payment`)}
+            showHomeButton={false}
+            className="max-w-2xl mx-auto"
+        />
+      </div>
     )
   }
   return (
-    <div className="container max-w-2xl mx-auto py-8">
-      <Card className="shadow-xl">
+    <div className="container max-w-2xl mx-auto py-6 sm:py-8 px-2 sm:px-4">
+      <Card className="shadow-xl w-full">
         <CardHeader className="text-center">
-          <ShieldCheck className="mx-auto h-12 w-12 text-primary mb-3" />
-          <CardTitle className="text-3xl font-headline">Secure Checkout</CardTitle>
-          <CardDescription>Complete your purchase for BookWise.</CardDescription>
+          <ShieldCheck className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-primary mb-2 sm:mb-3" />
+          <CardTitle className="text-2xl sm:text-3xl font-headline">Secure Checkout</CardTitle>
+          <CardDescription className="text-sm sm:text-base">Complete your purchase for BookWise.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <Card className="p-4 border rounded-lg bg-muted/50">
-            <h3 className="text-lg font-semibold mb-2">Order Summary</h3>
-            <div className="flex justify-between">
+        <CardContent className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+          <Card className="p-3 sm:p-4 border rounded-lg bg-muted/30">
+            <h3 className="text-md sm:text-lg font-semibold mb-1 sm:mb-2">Order Summary</h3>
+            <div className="flex justify-between text-sm sm:text-base">
               <span className="text-muted-foreground">Total Items:</span>
               <span className="font-medium">{checkoutData.itemCount}</span>
             </div>
-            <div className="flex justify-between font-bold text-xl text-primary mt-1">
+            <div className="flex justify-between font-bold text-lg sm:text-xl text-primary mt-1">
               <span>Amount Due:</span>
               <span>{formatPriceInOrderCurrency(amountInSelectedCurrency, displayRegion)}</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              (Original total: USD {checkoutData.totalAmountUSD.toFixed(2)})
-            </p>
+            {displayRegion.currencyCode !== 'USD' && (
+                 <p className="text-xs text-muted-foreground mt-1">
+                    (Original total: USD {checkoutData.totalAmountUSD.toFixed(2)})
+                </p>
+            )}
           </Card>
           
           {isProcessingOrder ? (
-             <div className="flex flex-col items-center justify-center p-6 text-center">
-                <Loader2 className="h-10 w-10 animate-spin text-primary mb-3" />
-                <p className="text-lg font-semibold text-foreground">Finalizing your order...</p>
-                <p className="text-sm text-muted-foreground">Please do not refresh or close this page.</p>
+             <div className="flex flex-col items-center justify-center p-4 sm:p-6 text-center">
+                <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 animate-spin text-primary mb-2 sm:mb-3" />
+                <p className="text-md sm:text-lg font-semibold text-foreground">Finalizing your order...</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Please do not refresh or close this page.</p>
             </div>
           ) : (
             <PaymentHandler
@@ -229,7 +236,8 @@ export default function PaymentPage() {
                 toast({
                     title: "Payment Error",
                     description: errorMessage,
-                    variant: "destructive"
+                    variant: "destructive",
+                    duration: 7000,
                 });
                 }}
                 currencyCodeForDisplay={displayRegion.currencyCode}
@@ -241,4 +249,3 @@ export default function PaymentPage() {
     </div>
   );
 }
-

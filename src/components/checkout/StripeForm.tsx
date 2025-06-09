@@ -14,17 +14,18 @@ import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, AlertTriangle } from 'lucide-react';
 
-// Conditionally load Stripe
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
 
 if (stripePublishableKey) {
     stripePromise = loadStripe(stripePublishableKey);
+} else {
+    console.error("Stripe Publishable Key (NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) is not set. Stripe payments will be unavailable.");
 }
 
 interface StripeFormProps {
     clientSecret: string;
-    onSuccess: () => void; // onSuccess now doesn't need to pass paymentId, it's handled by parent
+    onSuccess: () => void; 
 }
 
 function StripeCheckoutForm({ onSuccess }: { onSuccess: () => void }) {
@@ -44,13 +45,14 @@ function StripeCheckoutForm({ onSuccess }: { onSuccess: () => void }) {
         setError(undefined);
 
         try {
+            // The return_url should point to a page that can handle the redirect
+            // and extract status from query params, but for 'if_required' it's a fallback.
             const { error: submitError, paymentIntent } = await stripe.confirmPayment({
                 elements,
                 confirmParams: {
-                    // Make sure to change this to your payment completion page
-                    return_url: `${window.location.origin}/checkout/payment?status=success`, // or a dedicated success page
+                    return_url: `${window.location.origin}/checkout/payment?stripe_return=true`,
                 },
-                redirect: 'if_required', // Important: handle redirect or success/failure here
+                redirect: 'if_required', 
             });
 
             if (submitError) {
@@ -59,20 +61,28 @@ function StripeCheckoutForm({ onSuccess }: { onSuccess: () => void }) {
                 } else {
                     setError("An unexpected error occurred during payment. Please try again.");
                 }
+                 console.error("Stripe confirmPayment error:", submitError);
             } else {
-                // If redirect: 'if_required', paymentIntent will be available if successful
                 if (paymentIntent && (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing')) {
+                    // 'processing' means it might take a moment, webhook should confirm.
+                    // For immediate UI feedback, we can treat 'processing' as on its way to success.
                     onSuccess();
                 } else if (paymentIntent && paymentIntent.status === 'requires_payment_method') {
-                     setError("Payment failed. Please try a different payment method.");
-                } else if (!paymentIntent) {
-                    // This case might occur if redirect happened and user came back
-                    // or if payment is still processing and needs a webhook to confirm.
-                    // For now, assume success if no immediate error & no redirect, but ideally webhook handles final state.
-                    onSuccess(); // Optimistically call onSuccess, webhook should be source of truth
+                     setError("Payment failed. Please try a different payment method or check your card details.");
+                } else if (paymentIntent) {
+                    // Other statuses like 'requires_action', 'canceled'
+                    setError(`Payment status: ${paymentIntent.status}. Please follow any instructions or try again.`);
+                }
+                 else {
+                    // This case implies a redirect might have been expected or an unknown issue.
+                    // If redirect: 'if_required' leads here without error, it implies success if paymentIntent exists.
+                    // If no paymentIntent, something is wrong.
+                    console.warn("Stripe confirmPayment finished without explicit success/failure or error object. Assuming success for now, webhook will confirm.");
+                    onSuccess(); // Optimistic call
                 }
             }
         } catch (err) {
+            console.error("Stripe form submission error:", err);
             setError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
         } finally {
             setIsProcessing(false);
@@ -81,9 +91,17 @@ function StripeCheckoutForm({ onSuccess }: { onSuccess: () => void }) {
 
     return (
         <form onSubmit={handleSubmit}>
-            <PaymentElement id="payment-element" options={{layout: "tabs"}} />
+            <PaymentElement 
+                id="payment-element" 
+                options={{
+                    layout: {
+                        type: 'tabs', // 'tabs' or 'accordion'
+                        defaultCollapsed: false,
+                    }
+                }} 
+            />
             {error && (
-                <Alert variant="destructive" className="mt-4">
+                <Alert variant="destructive" className="mt-4 text-xs sm:text-sm">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>Payment Error</AlertTitle>
                     <AlertDescription>{error}</AlertDescription>
@@ -92,49 +110,42 @@ function StripeCheckoutForm({ onSuccess }: { onSuccess: () => void }) {
             <Button
                 type="submit"
                 disabled={!stripe || isProcessing}
-                className="w-full mt-6"
+                className="w-full mt-4 sm:mt-6 text-sm sm:text-base py-2.5 sm:py-3"
             >
-                {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</> : 'Pay Now'}
+                {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</> : 'Pay with Card'}
             </Button>
         </form>
     );
 }
 
 export function StripeForm({ clientSecret, onSuccess }: StripeFormProps) {
-    if (!stripePublishableKey) {
+    if (!stripePublishableKey || !stripePromise) {
         return (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="text-xs sm:text-sm">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Stripe Configuration Error</AlertTitle>
                 <AlertDescription>
-                    The Stripe publishable key is not configured. Card payments are currently unavailable.
-                    Please contact support or ensure <code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code> is set in the environment variables.
+                    Stripe is not configured correctly. Card payments are unavailable.
+                    { !stripePublishableKey && " (Missing Publishable Key)"}
+                    { !stripePromise && stripePublishableKey && " (Failed to load Stripe.js)"}
                 </AlertDescription>
             </Alert>
         );
     }
     
-    if (!stripePromise) {
-         return ( // Should not happen if stripePublishableKey is set, but as a fallback
-            <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Stripe Initialization Error</AlertTitle>
-                <AlertDescription>
-                    Could not initialize Stripe. Please refresh the page or try again later.
-                </AlertDescription>
-            </Alert>
-        );
-    }
 
     return (
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
             <Elements
                 stripe={stripePromise}
                 options={{
                     clientSecret,
                     appearance: {
-                        theme: 'stripe', // or 'night', 'flat', etc.
+                        theme: 'stripe', 
                         labels: 'floating',
+                        variables: {
+                            colorPrimary: '#4B0082', // Deep Indigo from your theme
+                        }
                     },
                 }}
             >
