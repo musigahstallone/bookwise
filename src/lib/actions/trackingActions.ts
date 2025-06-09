@@ -79,60 +79,67 @@ export async function handleRecordDownload(bookId: string, userId: string) {
 export interface OrderItemInput {
   bookId: string;
   title: string;
-  price: number; // Price at the time of purchase (USD)
+  price: number; // Price at the time of purchase (USD or KES, matching order currency)
   coverImageUrl: string;
   pdfUrl: string;
   dataAiHint?: string;
 }
 
-// This interface defines the complete data needed to create an order.
-// It's used by the payment service webhook after a payment is confirmed.
 export interface CreateOrderData {
     userId: string;
     items: OrderItemInput[];
-    totalAmountUSD: number;
+    totalAmountUSD: number; // Always store a USD equivalent for consistent reporting if needed
     regionCode: string;
-    currencyCode: string;
+    currencyCode: string; // The currency the order was placed in (e.g. KES, USD)
     itemCount: number;
     status: "pending" | "completed" | "failed"; // Status of the order
-    paymentGatewayId?: string;
+    paymentGatewayId?: string; // e.g., M-Pesa CheckoutRequestID or Stripe PaymentIntentID
     paymentMethod?: PaymentMethod;
 }
 
 
-// Server Action to create an order - now typically called by server-side logic (webhook)
+// Server Action to create an order - now typically called by server-side logic (webhook or successful mock)
 export async function handleCreateOrder(
   orderData: CreateOrderData
 ): Promise<{ success: boolean; message?: string; orderId?: string }> {
   if (!orderData.userId) {
-    return { success: false, message: 'User not authenticated.' };
+    return { success: false, message: 'User ID missing for order creation.' };
   }
    if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
     return { success: false, message: "Firebase Project ID not configured." };
   }
 
   try {
+    // Ensure items are correctly structured for Firestore (e.g., no undefined values for optional fields if Firestore rules disallow)
+    const cleanItems = orderData.items.map(item => ({
+        bookId: item.bookId,
+        title: item.title,
+        price: item.price, // This should be the price in the order's currency (e.g. KES for M-Pesa)
+        coverImageUrl: item.coverImageUrl,
+        pdfUrl: item.pdfUrl,
+        dataAiHint: item.dataAiHint || 'book',
+    }));
+
+
     const orderRef = await addDoc(collection(db, 'orders'), {
       userId: orderData.userId,
-      items: orderData.items, 
+      items: cleanItems, 
       totalAmountUSD: orderData.totalAmountUSD, 
       orderDate: serverTimestamp(),
       regionCode: orderData.regionCode,
       currencyCode: orderData.currencyCode, 
       itemCount: orderData.itemCount,
-      status: orderData.status, // Use the status passed in
+      status: orderData.status,
       paymentGatewayId: orderData.paymentGatewayId || null, 
       paymentMethod: orderData.paymentMethod || null, 
     });
     
     console.log(`Order ${orderRef.id} created with status: ${orderData.status}`);
     
-    // Revalidate paths that might display this new order
     revalidatePath('/admin/orders');
-    revalidatePath(`/my-orders`); // User's order history page
+    revalidatePath(`/my-orders`); 
     if (orderData.status === "completed") {
-        // Potentially revalidate other paths if a completed order affects them, e.g., dashboard stats
-        revalidatePath('/admin');
+        revalidatePath('/admin'); // For dashboard stats
     }
 
     return { success: true, message: 'Order created successfully.', orderId: orderRef.id };
