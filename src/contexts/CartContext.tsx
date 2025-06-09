@@ -92,7 +92,12 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       try {
         setIsLoading(true);
         const newCartItem = await addBookToFirestoreCart(currentUser.uid, book);
-        setCartItems((prevItems) => [...prevItems, newCartItem]);
+        setCartItems((prevItems) => {
+          // Remove any existing item with the same ID before adding the new one.
+          // This handles potential race conditions or inconsistencies.
+          const itemsWithoutCurrent = prevItems.filter(item => item.id !== newCartItem.id);
+          return [...itemsWithoutCurrent, newCartItem];
+        });
         toast({ 
             title: 'Added to Cart!', 
             description: `${book.title} has been added.`,
@@ -131,7 +136,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
               </Button>
             ),
         });
-        return [...prevItems, { ...book, quantity: 1 }];
+        // For localStorage, ensure we are adding a fresh item if it wasn't found
+        const newItem = { ...book, quantity: 1 } as CartItem; // Cast to CartItem
+        const itemsWithoutCurrent = prevItems.filter(item => item.id !== newItem.id);
+        return [...itemsWithoutCurrent, newItem];
       });
     }
   }, [currentUser, cartItems, toast]);
@@ -207,3 +215,4 @@ export const useCart = () => {
   }
   return context;
 };
+
