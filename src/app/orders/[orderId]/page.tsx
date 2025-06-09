@@ -1,4 +1,3 @@
-
 // src/app/orders/[orderId]/page.tsx
 'use client';
 
@@ -18,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
 import { formatCurrency } from '@/lib/formatters';
-import { getRegionByCode, defaultRegion } from '@/data/regionData'; // Added imports
+import { getRegionByCode, defaultRegion } from '@/data/regionData';
 
 function SpecificOrderPageContent() {
   const params = useParams();
@@ -29,6 +28,7 @@ function SpecificOrderPageContent() {
   const [order, setOrder] = useState<OrderWithUserDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloadErrors, setDownloadErrors] = useState<Record<string, string | null>>({}); // State for item-specific download errors
   const { toast } = useToast();
 
   const fetchOrderDetails = async () => {
@@ -63,12 +63,18 @@ function SpecificOrderPageContent() {
   }, [orderId, currentUser, authIsLoading]); 
 
   const onDownloadClick = async (bookId: string, bookTitle: string, pdfUrl: string) => {
+    setDownloadErrors(prev => ({ ...prev, [bookId]: null })); // Clear previous error for this item
+
     if (!currentUser) {
-      toast({ title: "Authentication Error", description: "Log in to download.", variant: "destructive" });
+      const authErrorMsg = "Log in to download.";
+      setDownloadErrors(prev => ({ ...prev, [bookId]: authErrorMsg }));
+      toast({ title: "Authentication Error", description: authErrorMsg, variant: "destructive" });
       return;
     }
     if (!pdfUrl || pdfUrl.includes('placeholder-book.pdf') || pdfUrl.trim() === '') {
-        toast({ title: "Download Not Available", description: `PDF for "${bookTitle}" is not available.`, variant: "destructive" });
+        const noPdfMsg = `PDF for "${bookTitle}" is not available.`;
+        setDownloadErrors(prev => ({ ...prev, [bookId]: noPdfMsg }));
+        toast({ title: "Download Not Available", description: noPdfMsg, variant: "destructive" });
         return;
     }
     try {
@@ -82,12 +88,14 @@ function SpecificOrderPageContent() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-
       } else {
+        setDownloadErrors(prev => ({ ...prev, [bookId]: result.message || "Download denied." }));
         toast({ title: "Download Denied", description: result.message, variant: "destructive", duration: 7000 });
       }
     } catch (e: any) {
-      toast({ title: "Download Error", description: e.message || "An unexpected error occurred.", variant: "destructive" });
+      const catchErrorMsg = e.message || "An unexpected error occurred.";
+      setDownloadErrors(prev => ({ ...prev, [bookId]: catchErrorMsg }));
+      toast({ title: "Download Error", description: catchErrorMsg, variant: "destructive" });
     }
   };
   
@@ -120,12 +128,10 @@ function SpecificOrderPageContent() {
 
   let displayAmountForTotal = order.actualAmountPaid;
   let displayCurrencyForTotal = order.currencyCode;
-  // displayRegionCodeForTotal remains order.regionCode
 
   if (typeof order.actualAmountPaid !== 'number' || isNaN(order.actualAmountPaid)) {
     const regionForCalculation = getRegionByCode(order.regionCode) || defaultRegion;
     displayAmountForTotal = (order.totalAmountUSD || 0) * regionForCalculation.conversionRateToUSD;
-    // displayCurrencyForTotal is already order.currencyCode, which is what we want.
   }
   const formattedOrderTotal = formatCurrency(displayAmountForTotal, displayCurrencyForTotal, order.regionCode);
 
@@ -161,8 +167,7 @@ function SpecificOrderPageContent() {
           <h3 className="text-lg font-semibold font-headline text-foreground mb-3">Items in this Order ({order.itemCount}):</h3>
           <div className="space-y-4">
             {order.items.map((item, index) => {
-               // Calculate item price in order's currency
-               let itemPriceInOrderCurrency = item.price; // Assume item.price is USD initially
+               let itemPriceInOrderCurrency = item.price; 
                const regionForItem = getRegionByCode(order.regionCode) || defaultRegion;
                itemPriceInOrderCurrency = item.price * regionForItem.conversionRateToUSD;
                const formattedItemPrice = formatCurrency(itemPriceInOrderCurrency, order.currencyCode, order.regionCode);
@@ -180,19 +185,26 @@ function SpecificOrderPageContent() {
                       <p className="text-sm text-muted-foreground">Price Paid: {formattedItemPrice}</p>
                     </div>
                     {order.status === 'completed' && (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="w-full sm:w-auto mt-2 sm:mt-0 self-start sm:self-center"
-                        onClick={() => onDownloadClick(item.bookId, item.title, item.pdfUrl)}
-                        disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-                        Download PDF
-                      </Button>
+                      <div className="w-full sm:w-auto mt-2 sm:mt-0 self-start sm:self-center">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="w-full"
+                          onClick={() => onDownloadClick(item.bookId, item.title, item.pdfUrl)}
+                          disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
+                        >
+                          <Download className="mr-2 h-4 w-4" />
+                          Download PDF
+                        </Button>
+                        {downloadErrors[item.bookId] && (
+                          <p className="text-xs text-destructive mt-1.5 text-center sm:text-left">
+                            {downloadErrors[item.bookId]}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
-                  {(!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === '') && order.status === 'completed' && (
+                  {(!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === '') && order.status === 'completed' && !downloadErrors[item.bookId] && (
                       <p className="text-xs text-destructive mt-1 flex items-center"><Info className="h-3 w-3 mr-1"/> PDF currently unavailable for this item.</p>
                   )}
                 </div>
