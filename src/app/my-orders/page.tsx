@@ -5,14 +5,14 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { History, ShoppingBag, Loader2, AlertTriangle, CalendarDays, Hash, Eye, Info } from 'lucide-react'; // Removed DollarSign, ExternalLink
+import { History, ShoppingBag, Loader2, AlertTriangle, CalendarDays, Hash, Eye, Info } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getOrdersByUserIdFromDb, type OrderWithUserDetails } from '@/lib/tracking-service-firebase';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { getRegionByCode, defaultRegion } from '@/data/regionData';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { formatCurrency } from '@/lib/formatters'; // Import the new helper
 
 export default function MyOrdersPage() {
   const { currentUser, isLoading: authIsLoading } = useAuth();
@@ -40,28 +40,6 @@ export default function MyOrdersPage() {
       setIsLoading(false); 
     }
   }, [currentUser, authIsLoading]);
-
-
-  const formatOrderPrice = (totalAmount?: number, orderCurrencyCode?: string, orderRegionCode?: string) => {
-    // Add a defensive check for totalAmount
-    if (typeof totalAmount !== 'number' || isNaN(totalAmount) || !orderCurrencyCode || !orderRegionCode) {
-      return `${orderCurrencyCode || ''} N/A`; 
-    }
-
-    const resolvedRegion = getRegionByCode(orderRegionCode) || defaultRegion;
-    // totalAmount here is actualAmountPaid in order's currency
-    let displayPrice;
-    if (orderCurrencyCode === 'KES') {
-        if (Math.abs(totalAmount - Math.round(totalAmount)) < 0.005) {
-             displayPrice = Math.round(totalAmount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-        } else {
-            displayPrice = totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        }
-    } else {
-         displayPrice = totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-    return `${orderCurrencyCode} ${displayPrice}`;
-  };
 
   const getStatusBadgeColorClasses = (status: string): string => {
     switch (status.toLowerCase()) {
@@ -158,8 +136,7 @@ export default function MyOrdersPage() {
                     {order.status}
                   </Badge>
                   <div className="text-md sm:text-lg font-semibold text-primary flex items-center">
-                    {/* Replaced DollarSign icon with direct display of currency */}
-                    Total: {formatOrderPrice(order.actualAmountPaid, order.currencyCode, order.regionCode)}
+                    Total: {formatCurrency(order.actualAmountPaid, order.currencyCode, order.regionCode)}
                   </div>
                 </div>
               </div>
@@ -187,4 +164,3 @@ export default function MyOrdersPage() {
     </div>
   );
 }
-

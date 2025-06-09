@@ -1,4 +1,3 @@
-
 // src/app/orders/[orderId]/page.tsx
 'use client';
 
@@ -14,10 +13,10 @@ import { getOrderByIdFromDb, type OrderWithUserDetails } from '@/lib/tracking-se
 import { handleRecordDownload } from '@/lib/actions/trackingActions';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
+import { formatCurrency } from '@/lib/formatters'; // Import the new helper
 
 function SpecificOrderPageContent() {
   const params = useParams();
@@ -90,21 +89,6 @@ function SpecificOrderPageContent() {
       toast({ title: "Download Error", description: e.message || "An unexpected error occurred.", variant: "destructive" });
     }
   };
-
-  const formatDisplayPrice = (amount: number, currencyCode: string, regionCode: string): string => {
-    const region = getRegionByCode(regionCode) || defaultRegion;
-    let displayPrice;
-    if (currencyCode === 'KES') {
-        if (Math.abs(amount - Math.round(amount)) < 0.005) { // Check if it's essentially a whole number
-            displayPrice = Math.round(amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-        } else {
-            displayPrice = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        }
-    } else {
-        displayPrice = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-    return `${currencyCode} ${displayPrice}`;
-  };
   
   const getStatusBadgeColorClasses = (status?: string): string => {
     switch (status?.toLowerCase()) {
@@ -156,7 +140,7 @@ function SpecificOrderPageContent() {
             <p><strong className="font-medium text-foreground">Date Placed:</strong> {format(order.orderDate, "MMM d, yyyy 'at' h:mm a")}</p>
             <p><strong className="font-medium text-foreground">Last Updated:</strong> {format(order.lastUpdatedAt, "MMM d, yyyy 'at' h:mm a")}</p>
             <p><strong className="font-medium text-foreground">Payment Method:</strong> {order.paymentMethod || 'N/A'}</p>
-            <p><strong className="font-medium text-foreground">Total:</strong> {formatDisplayPrice(order.actualAmountPaid, order.currencyCode, order.regionCode)}</p>
+            <p><strong className="font-medium text-foreground">Total:</strong> {formatCurrency(order.actualAmountPaid, order.currencyCode, order.regionCode)}</p>
           </div>
         </CardHeader>
 
@@ -173,7 +157,7 @@ function SpecificOrderPageContent() {
                     <Link href={`/books/${item.bookId}`} className="hover:underline">
                       <h4 className="text-md font-semibold font-headline text-primary">{item.title}</h4>
                     </Link>
-                    <p className="text-sm text-muted-foreground">Price Paid: {formatDisplayPrice(item.price, order.currencyCode, order.regionCode)}</p>
+                    <p className="text-sm text-muted-foreground">Price Paid: {formatCurrency(item.price, order.currencyCode, order.regionCode)}</p>
                   </div>
                   {order.status === 'completed' && (
                     <Button
@@ -188,7 +172,7 @@ function SpecificOrderPageContent() {
                     </Button>
                   )}
                 </div>
-                {!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === '' && order.status === 'completed' && (
+                {(!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === '') && order.status === 'completed' && (
                     <p className="text-xs text-destructive mt-1 flex items-center"><Info className="h-3 w-3 mr-1"/> PDF currently unavailable for this item.</p>
                 )}
               </div>
@@ -244,5 +228,3 @@ export default function SpecificOrderPage() {
     // </Suspense>
   );
 }
-
-    
