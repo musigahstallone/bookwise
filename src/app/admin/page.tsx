@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BookCopy, Users, BarChart3, Info, Database, DownloadCloud, UserPlus, RefreshCw, ShoppingCart, AlertTriangle as PageAlertTriangleIcon } from 'lucide-react'; // Renamed AlertTriangle to avoid conflict
+import { BookCopy, Users, BarChart3, Info, Database, DownloadCloud, UserPlus, RefreshCw, ShoppingCart, AlertTriangle as PageAlertTriangleIcon, Wrench } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -12,6 +12,7 @@ import { Loader2 } from 'lucide-react';
 import { countBooksInDb } from '@/lib/book-service-firebase';
 import { countUsersInDb } from '@/lib/user-service-firebase'; 
 import { handleSeedDatabase } from '@/lib/actions/bookActions';
+import { handleBatchUpdateMissingOrderData } from '@/lib/actions/trackingActions'; // New Action
 import { getDashboardStats } from '@/lib/stats-service-firebase';
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
 import {
@@ -42,6 +43,7 @@ type FetchDashboardDataFunction = () => Promise<{
 interface LoadingStates {
   seedingBooks: boolean;
   reloadingStats: boolean;
+  updatingOrderData: boolean; // New loading state
 }
 
 export default function AdminDashboardPage() {
@@ -49,6 +51,7 @@ export default function AdminDashboardPage() {
   const [loadingStates, setLoadingStates] = useState<LoadingStates>({
     seedingBooks: false,
     reloadingStats: false,
+    updatingOrderData: false, // Initialize new state
   });
   const [hasSeededBooks, setHasSeededBooks] = useState(false);
 
@@ -119,6 +122,7 @@ export default function AdminDashboardPage() {
         setDashboardData(data);
         setIsInitialLoading(false);
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
 
@@ -152,6 +156,30 @@ export default function AdminDashboardPage() {
       toast({ title: 'Error Seeding Books', description: result.message, variant: 'destructive' });
     }
     setLoadingStates(prev => ({ ...prev, seedingBooks: false }));
+  };
+
+  const handleFixOrderData = async () => {
+    if (!firebaseConfigured) {
+      toast({ title: 'Firebase Not Configured', description: 'Cannot update order data.', variant: 'destructive' });
+      return;
+    }
+    setLoadingStates(prev => ({ ...prev, updatingOrderData: true }));
+    toast({ title: 'Updating Order Data...', description: 'Processing orders, please wait.' });
+    
+    const result = await handleBatchUpdateMissingOrderData();
+    
+    if (result.success) {
+      toast({ title: 'Order Data Update Complete', description: `${result.message}` });
+      if (result.updatedCount > 0) {
+        await handleReloadStats(); // Refresh dashboard if data changed
+      }
+    } else {
+      toast({ title: 'Error Updating Order Data', description: result.message, variant: 'destructive', duration: 7000 });
+      if (result.errors && result.errors.length > 0) {
+        console.error("Errors during order data update:", result.errors);
+      }
+    }
+    setLoadingStates(prev => ({ ...prev, updatingOrderData: false }));
   };
   
   const salesAmountDisplay = typeof dashboardData.totalSalesAmount === 'number' 
@@ -228,7 +256,7 @@ export default function AdminDashboardPage() {
                   <CardTitle className="flex items-center">
                       <Database className="mr-2 h-5 w-5"/> Database Actions
                   </CardTitle>
-                  <CardDescription>Seed the initial book catalog. Other data like users, orders, and downloads are generated organically.</CardDescription>
+                  <CardDescription>Perform administrative actions on your database.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col sm:flex-row flex-wrap gap-4">
                  {!hasSeededBooks && (
@@ -258,6 +286,34 @@ export default function AdminDashboardPage() {
                  {hasSeededBooks && (
                     <p className="text-sm text-muted-foreground p-2 rounded-md bg-muted/50">Book catalog has been seeded.</p>
                  )}
+                 <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="outline" disabled={loadingStates.updatingOrderData || !firebaseConfigured}>
+                            {loadingStates.updatingOrderData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wrench className="mr-2 h-4 w-4" />}
+                            Fix Missing Order Data
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>Fix Missing Order Data?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will scan all orders and attempt to:
+                            <ul className="list-disc pl-5 mt-2 text-xs">
+                                <li>Calculate and fill missing `actualAmountPaid` based on `totalAmountUSD` and region.</li>
+                                <li>Set missing `currencyCode` based on region.</li>
+                                <li>Update `paymentMethod` to "mock" if it's currently "N/A" or empty.</li>
+                            </ul>
+                            This action is useful for correcting data inconsistencies.
+                        </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                        <AlertDialogCancel disabled={loadingStates.updatingOrderData}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleFixOrderData} disabled={loadingStates.updatingOrderData} className="bg-blue-500 hover:bg-blue-600">
+                            {loadingStates.updatingOrderData ? 'Processing...' : 'Yes, Fix Data'}
+                        </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
               </CardContent>
           </Card>
 
@@ -297,8 +353,8 @@ export default function AdminDashboardPage() {
        <div className="mt-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
         <p className="font-bold flex items-center"><PageAlertTriangleIcon className="mr-2 h-5 w-5" />Important: Data Persistence Note</p>
         <p>- <strong className="text-green-700">PDF & Cover Image Files:</strong> Uploaded files are persisted in Firebase Storage.</p>
-        <p>- <strong className="text-green-700">Book, User, Cart, Order, Download Metadata:</strong> Information is managed in Firebase Firestore and will persist.</p>
-        <p className="mt-2">- The "Seed Book Catalog" action populates the 'books' collection. Users are created via signup. Orders and downloads are tracked organically.</p>
+        <p>- <strong className="text-green-700">Book, User, Order, Download, Transaction Metadata:</strong> Information is managed in Firebase Firestore and will persist.</p>
+        <p className="mt-2">- The "Seed Book Catalog" action populates the 'books' collection. Users are created via signup. Orders, downloads and transactions are tracked organically.</p>
       </div>
     </div>
   );
