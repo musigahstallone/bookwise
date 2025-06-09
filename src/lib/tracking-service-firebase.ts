@@ -15,6 +15,9 @@ import { getUserDocumentFromDb } from './user-service-firebase';
 import { getBookByIdFromDb } from './book-service-firebase';
 import type { OrderItemInput, OrderStatus } from './actions/trackingActions';
 
+const BOOK_DOWNLOADS_COLLECTION = 'bookDownloads'; // Added declaration
+const ORDERS_COLLECTION = "orders";
+
 
 export interface OrderWithUserDetails {
   id: string;
@@ -34,7 +37,6 @@ export interface OrderWithUserDetails {
   lastUpdatedAt: Date;
 }
 
-const ORDERS_COLLECTION = "orders";
 
 export const getOrderByIdFromDb = async (orderId: string, userId?: string): Promise<OrderWithUserDetails | null> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
