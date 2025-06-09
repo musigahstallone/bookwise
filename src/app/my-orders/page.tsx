@@ -12,7 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { formatCurrency } from '@/lib/formatters'; // Import the new helper
+import { formatCurrency } from '@/lib/formatters';
+import { getRegionByCode, defaultRegion } from '@/data/regionData'; // Added imports
 
 export default function MyOrdersPage() {
   const { currentUser, isLoading: authIsLoading } = useAuth();
@@ -111,46 +112,60 @@ export default function MyOrdersPage() {
       </div>
 
       <div className="space-y-6">
-        {orders.map((order) => (
-          <Card key={order.id} className="shadow-lg border border-border hover:shadow-xl transition-shadow">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-4">
-                <div className="flex-grow space-y-1.5">
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <Hash className="h-4 w-4 mr-1.5 shrink-0" />
-                    Order ID: <span className="font-medium text-foreground ml-1 truncate">{order.id}</span>
+        {orders.map((order) => {
+          let displayAmount = order.actualAmountPaid;
+          let displayCurrency = order.currencyCode;
+          // No need to modify displayRegionCode, formatCurrency handles fallbacks
+          
+          if (typeof order.actualAmountPaid !== 'number' || isNaN(order.actualAmountPaid)) {
+            const regionForCalculation = getRegionByCode(order.regionCode) || defaultRegion;
+            displayAmount = (order.totalAmountUSD || 0) * regionForCalculation.conversionRateToUSD;
+            // displayCurrency is already set to order.currencyCode, which is correct.
+            // formatCurrency will use defaultRegion's symbol if order.regionCode is "N/A" or not found.
+          }
+          const formattedTotal = formatCurrency(displayAmount, displayCurrency, order.regionCode);
+
+          return (
+            <Card key={order.id} className="shadow-lg border border-border hover:shadow-xl transition-shadow">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-4">
+                  <div className="flex-grow space-y-1.5">
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <Hash className="h-4 w-4 mr-1.5 shrink-0" />
+                      Order ID: <span className="font-medium text-foreground ml-1 truncate">{order.id}</span>
+                    </div>
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <CalendarDays className="h-4 w-4 mr-1.5 shrink-0" />
+                      Placed: <span className="font-medium text-foreground ml-1">{format(order.orderDate, "MMM d, yyyy 'at' h:mm a")}</span>
+                    </div>
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <ShoppingBag className="h-4 w-4 mr-1.5 shrink-0" />
+                      Items: <span className="font-medium text-foreground ml-1">{order.itemCount}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <CalendarDays className="h-4 w-4 mr-1.5 shrink-0" />
-                    Placed: <span className="font-medium text-foreground ml-1">{format(order.orderDate, "MMM d, yyyy 'at' h:mm a")}</span>
-                  </div>
-                   <div className="flex items-center text-sm text-muted-foreground">
-                    <ShoppingBag className="h-4 w-4 mr-1.5 shrink-0" />
-                    Items: <span className="font-medium text-foreground ml-1">{order.itemCount}</span>
+                  <div className="w-full sm:w-auto flex flex-col items-start sm:items-end space-y-2">
+                    <Badge
+                      className={`capitalize text-xs sm:text-sm px-2.5 py-1 ${getStatusBadgeColorClasses(order.status)}`}
+                    >
+                      {order.status}
+                    </Badge>
+                    <div className="text-md sm:text-lg font-semibold text-primary flex items-center">
+                      Total: {formattedTotal}
+                    </div>
                   </div>
                 </div>
-                <div className="w-full sm:w-auto flex flex-col items-start sm:items-end space-y-2">
-                  <Badge 
-                    className={`capitalize text-xs sm:text-sm px-2.5 py-1 ${getStatusBadgeColorClasses(order.status)}`}
-                  >
-                    {order.status}
-                  </Badge>
-                  <div className="text-md sm:text-lg font-semibold text-primary flex items-center">
-                    Total: {formatCurrency(order.actualAmountPaid, order.currencyCode, order.regionCode)}
-                  </div>
+                <Separator className="my-3 sm:my-4" />
+                <div className="flex justify-end">
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/orders/${order.id}`}>
+                      <Eye className="mr-2 h-4 w-4" /> View Details
+                    </Link>
+                  </Button>
                 </div>
-              </div>
-              <Separator className="my-3 sm:my-4" />
-              <div className="flex justify-end">
-                <Button asChild variant="outline" size="sm">
-                  <Link href={`/orders/${order.id}`}>
-                    <Eye className="mr-2 h-4 w-4" /> View Details
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
        <div className="mt-8 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-700 rounded-md text-sm">
         <p className="font-bold flex items-center"><Info className="mr-2 h-5 w-5" />Order Status Info:</p>

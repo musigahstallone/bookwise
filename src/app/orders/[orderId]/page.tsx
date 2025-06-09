@@ -1,3 +1,4 @@
+
 // src/app/orders/[orderId]/page.tsx
 'use client';
 
@@ -16,7 +17,8 @@ import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
-import { formatCurrency } from '@/lib/formatters'; // Import the new helper
+import { formatCurrency } from '@/lib/formatters';
+import { getRegionByCode, defaultRegion } from '@/data/regionData'; // Added imports
 
 function SpecificOrderPageContent() {
   const params = useParams();
@@ -54,11 +56,11 @@ function SpecificOrderPageContent() {
   };
 
   useEffect(() => {
-    if (!authIsLoading) { // Only fetch once auth state is known
+    if (!authIsLoading) { 
         fetchOrderDetails();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderId, currentUser, authIsLoading]); // Rerun if orderId or user changes
+  }, [orderId, currentUser, authIsLoading]); 
 
   const onDownloadClick = async (bookId: string, bookTitle: string, pdfUrl: string) => {
     if (!currentUser) {
@@ -74,10 +76,9 @@ function SpecificOrderPageContent() {
       const result = await handleRecordDownload(bookId, currentUser.uid);
       if (result.success) {
         toast({ title: "Download Approved", description: `Starting download for "${bookTitle}".` });
-        // Create a temporary link and click it to trigger download
         const link = document.createElement('a');
         link.href = pdfUrl;
-        link.setAttribute('download', `${bookTitle.replace(/[^a-zA-Z0-9_]/g, '_')}.pdf`); // Sanitize filename
+        link.setAttribute('download', `${bookTitle.replace(/[^a-zA-Z0-9_]/g, '_')}.pdf`); 
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -117,6 +118,18 @@ function SpecificOrderPageContent() {
     return <ErrorDisplay title="Order Not Found" message="The requested order could not be found or is inaccessible." showHomeButton={true} />;
   }
 
+  let displayAmountForTotal = order.actualAmountPaid;
+  let displayCurrencyForTotal = order.currencyCode;
+  // displayRegionCodeForTotal remains order.regionCode
+
+  if (typeof order.actualAmountPaid !== 'number' || isNaN(order.actualAmountPaid)) {
+    const regionForCalculation = getRegionByCode(order.regionCode) || defaultRegion;
+    displayAmountForTotal = (order.totalAmountUSD || 0) * regionForCalculation.conversionRateToUSD;
+    // displayCurrencyForTotal is already order.currencyCode, which is what we want.
+  }
+  const formattedOrderTotal = formatCurrency(displayAmountForTotal, displayCurrencyForTotal, order.regionCode);
+
+
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
       <Button variant="outline" asChild className="mb-6 group">
@@ -140,43 +153,51 @@ function SpecificOrderPageContent() {
             <p><strong className="font-medium text-foreground">Date Placed:</strong> {format(order.orderDate, "MMM d, yyyy 'at' h:mm a")}</p>
             <p><strong className="font-medium text-foreground">Last Updated:</strong> {format(order.lastUpdatedAt, "MMM d, yyyy 'at' h:mm a")}</p>
             <p><strong className="font-medium text-foreground">Payment Method:</strong> {order.paymentMethod || 'N/A'}</p>
-            <p><strong className="font-medium text-foreground">Total:</strong> {formatCurrency(order.actualAmountPaid, order.currencyCode, order.regionCode)}</p>
+            <p><strong className="font-medium text-foreground">Total:</strong> {formattedOrderTotal}</p>
           </div>
         </CardHeader>
 
         <CardContent className="p-4 sm:p-6">
           <h3 className="text-lg font-semibold font-headline text-foreground mb-3">Items in this Order ({order.itemCount}):</h3>
           <div className="space-y-4">
-            {order.items.map((item, index) => (
-              <div key={item.bookId || index} className="p-3 border rounded-md bg-card hover:shadow-sm transition-shadow">
-                <div className="flex flex-col sm:flex-row items-start gap-4">
-                  <div className="w-24 h-32 sm:w-20 sm:h-28 relative flex-shrink-0 rounded overflow-hidden shadow">
-                    <Image src={item.coverImageUrl} alt={item.title} layout="fill" objectFit="cover" data-ai-hint={item.dataAiHint || 'book cover small'}/>
+            {order.items.map((item, index) => {
+               // Calculate item price in order's currency
+               let itemPriceInOrderCurrency = item.price; // Assume item.price is USD initially
+               const regionForItem = getRegionByCode(order.regionCode) || defaultRegion;
+               itemPriceInOrderCurrency = item.price * regionForItem.conversionRateToUSD;
+               const formattedItemPrice = formatCurrency(itemPriceInOrderCurrency, order.currencyCode, order.regionCode);
+
+              return (
+                <div key={item.bookId || index} className="p-3 border rounded-md bg-card hover:shadow-sm transition-shadow">
+                  <div className="flex flex-col sm:flex-row items-start gap-4">
+                    <div className="w-24 h-32 sm:w-20 sm:h-28 relative flex-shrink-0 rounded overflow-hidden shadow">
+                      <Image src={item.coverImageUrl} alt={item.title} layout="fill" objectFit="cover" data-ai-hint={item.dataAiHint || 'book cover small'}/>
+                    </div>
+                    <div className="flex-grow">
+                      <Link href={`/books/${item.bookId}`} className="hover:underline">
+                        <h4 className="text-md font-semibold font-headline text-primary">{item.title}</h4>
+                      </Link>
+                      <p className="text-sm text-muted-foreground">Price Paid: {formattedItemPrice}</p>
+                    </div>
+                    {order.status === 'completed' && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="w-full sm:w-auto mt-2 sm:mt-0 self-start sm:self-center"
+                        onClick={() => onDownloadClick(item.bookId, item.title, item.pdfUrl)}
+                        disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download PDF
+                      </Button>
+                    )}
                   </div>
-                  <div className="flex-grow">
-                    <Link href={`/books/${item.bookId}`} className="hover:underline">
-                      <h4 className="text-md font-semibold font-headline text-primary">{item.title}</h4>
-                    </Link>
-                    <p className="text-sm text-muted-foreground">Price Paid: {formatCurrency(item.price, order.currencyCode, order.regionCode)}</p>
-                  </div>
-                  {order.status === 'completed' && (
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="w-full sm:w-auto mt-2 sm:mt-0 self-start sm:self-center"
-                      onClick={() => onDownloadClick(item.bookId, item.title, item.pdfUrl)}
-                      disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Download PDF
-                    </Button>
+                  {(!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === '') && order.status === 'completed' && (
+                      <p className="text-xs text-destructive mt-1 flex items-center"><Info className="h-3 w-3 mr-1"/> PDF currently unavailable for this item.</p>
                   )}
                 </div>
-                {(!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === '') && order.status === 'completed' && (
-                    <p className="text-xs text-destructive mt-1 flex items-center"><Info className="h-3 w-3 mr-1"/> PDF currently unavailable for this item.</p>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {order.status === 'failed' && (
@@ -221,10 +242,14 @@ function SpecificOrderPageContent() {
 
 export default function SpecificOrderPage() {
   return (
-    // Suspense can be used if you have parts of the page that load independently
-    // For now, the main content loader handles the page loading state.
-    // <Suspense fallback={<LoaderComponent />}>
-      <SpecificOrderPageContent />
-    // </Suspense>
+      <Suspense fallback={
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+            <p className="text-lg text-muted-foreground">Loading order details...</p>
+        </div>
+      }>
+        <SpecificOrderPageContent />
+      </Suspense>
   );
 }
+
