@@ -1,3 +1,4 @@
+
 import { db } from "./firebase";
 import {
   collection,
@@ -10,16 +11,17 @@ import {
 } from "firebase/firestore";
 import { createStripePaymentIntent } from "./stripe-integration";
 import { initiateStkPush } from "./mpesa-integration";
+import type { AxiosError } from 'axios';
 
 export type PaymentMethod = "stripe" | "mpesa" | "mock";
-// after checkout I need the app to redirect to the success page with the bookId and paymentId
+
 export interface PaymentDetails {
-  amount: number;
+  amount: number; // For M-Pesa, this should be in KES. For Stripe, in smallest currency unit (e.g., cents).
   currency: string;
   userId: string;
   bookId: string;
   email?: string;
-  phoneNumber?: string;
+  phoneNumber?: string; // Normalized to 254xxxxxxxxx for M-Pesa
 }
 
 export interface PaymentResponse {
@@ -27,17 +29,17 @@ export interface PaymentResponse {
   error?: string;
   paymentId?: string;
   clientSecret?: string; // For Stripe
-  checkoutUrl?: string; // For redirect-based payments
+  checkoutUrl?: string; // For redirect-based payments (not used in current M-Pesa STK)
 }
 
 interface TransactionRecord {
   userId: string;
   bookId: string;
-  amount: number;
+  amount: number; // Actual transaction amount
   currency: string;
   paymentMethod: PaymentMethod;
   status: "pending" | "completed" | "failed";
-  paymentId?: string;
+  paymentId?: string; // e.g., Stripe PaymentIntent ID or M-Pesa CheckoutRequestID
   createdAt: Date;
   metadata?: Record<string, any>;
 }
@@ -64,16 +66,20 @@ async function handleStripePayment(
 ): Promise<PaymentResponse> {
   try {
     if (!process.env.STRIPE_SECRET_KEY) {
-      throw new Error("Stripe configuration missing");
+      throw new Error("Stripe configuration missing: STRIPE_SECRET_KEY not set.");
     }
+     if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
+      throw new Error("Stripe configuration missing: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY not set.");
+    }
+
 
     const stripeResponse = await createStripePaymentIntent(
       {
         secretKey: process.env.STRIPE_SECRET_KEY,
-        webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+        webhookSecret: process.env.STRIPE_WEBHOOK_SECRET, // Optional for client-side confirmation flow
       },
       {
-        amount: details.amount,
+        amount: details.amount, // Expected in smallest currency unit (e.g., cents)
         currency: details.currency.toLowerCase(),
         metadata: { userId: details.userId, bookId: details.bookId },
         receipt_email: details.email,
@@ -83,13 +89,13 @@ async function handleStripePayment(
     await recordTransaction({
       userId: details.userId,
       bookId: details.bookId,
-      amount: details.amount,
+      amount: details.amount, // Store the amount in cents for Stripe consistency if desired, or convert back
       currency: details.currency,
       paymentMethod: "stripe",
-      status: "pending",
+      status: "pending", // Status becomes 'completed' after successful client-side confirmation or webhook
       paymentId: stripeResponse.paymentIntentId,
       createdAt: new Date(),
-      metadata: { clientSecret: stripeResponse.clientSecret },
+      metadata: { clientSecret: stripeResponse.clientSecret }, // Store client secret for client-side use
     });
 
     return {
@@ -99,59 +105,90 @@ async function handleStripePayment(
     };
   } catch (error) {
     console.error("Stripe payment error:", error);
-    return { success: false, error: "Stripe payment failed" };
+    const errorMessage = error instanceof Error ? error.message : "Stripe payment processing failed.";
+    return { success: false, error: errorMessage };
   }
 }
 
 // Handle M-Pesa Payment
 async function handleMpesaPayment(
-  details: PaymentDetails
+  details: PaymentDetails // details.amount is expected to be in KES here
 ): Promise<PaymentResponse> {
   try {
-    if (!process.env.MPESA_CONSUMER_KEY) {
-      throw new Error("M-Pesa configuration missing");
+    if (!process.env.MPESA_CONSUMER_KEY || !process.env.MPESA_CONSUMER_SECRET || !process.env.MPESA_SHORTCODE || !process.env.MPESA_PASSKEY || !process.env.MPESA_CALLBACK_URL) {
+      throw new Error("M-Pesa configuration is incomplete. Ensure all MPESA_ environment variables are set.");
     }
 
     if (!details.phoneNumber) {
-      throw new Error("Phone number is required for M-Pesa payments");
+      throw new Error("Phone number is required for M-Pesa payments.");
     }
+    if (details.currency.toUpperCase() !== 'KES') {
+        throw new Error("M-Pesa payments must be in KES. Amount passed was in " + details.currency);
+    }
+
+    const mpesaApiAmount = process.env.MPESA_ENVIRONMENT === 'sandbox' ? 1 : details.amount;
+    if (process.env.MPESA_ENVIRONMENT === 'sandbox' && details.amount !== 1) {
+        console.warn(`M-Pesa Sandbox: Original amount KES ${details.amount} overridden to 1 for sandbox API call.`);
+    }
+
 
     const mpesaResponse = await initiateStkPush(
       {
         consumerKey: process.env.MPESA_CONSUMER_KEY,
-        consumerSecret: process.env.MPESA_CONSUMER_SECRET!,
-        shortCode: process.env.MPESA_SHORTCODE!,
-        passkey: process.env.MPESA_PASSKEY!,
-        callbackUrl: process.env.MPESA_CALLBACK_URL!,
-        environment: process.env.MPESA_ENVIRONMENT as "sandbox" | "production",
+        consumerSecret: process.env.MPESA_CONSUMER_SECRET,
+        shortCode: process.env.MPESA_SHORTCODE,
+        passkey: process.env.MPESA_PASSKEY,
+        callbackUrl: process.env.MPESA_CALLBACK_URL,
+        environment: process.env.MPESA_ENVIRONMENT as "sandbox" | "production" || "sandbox",
       },
       {
-        phoneNumber: details.phoneNumber,
-        amount: details.amount,
-        accountReference: details.bookId,
-        transactionDesc: `BookWise purchase: ${details.bookId}`,
+        phoneNumber: details.phoneNumber, // Already normalized by PaymentHandler
+        amount: mpesaApiAmount, // Use 1 for sandbox, actual for production
+        accountReference: details.bookId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12) || "BookWise", // Sanitize and shorten
+        transactionDesc: `BookWise: ${details.bookId}`.substring(0,100), // Max 100 chars
       }
     );
 
+    // Check M-Pesa API response code for immediate failure
+    if (mpesaResponse.ResponseCode !== "0") {
+        console.error("M-Pesa STK Push initiation failed:", mpesaResponse);
+        throw new Error(mpesaResponse.CustomerMessage || mpesaResponse.ResponseDescription || "M-Pesa STK push initiation failed.");
+    }
+    
     await recordTransaction({
       userId: details.userId,
       bookId: details.bookId,
-      amount: details.amount,
+      amount: details.amount, // Record the actual KES amount of the order
       currency: "KES",
       paymentMethod: "mpesa",
-      status: "pending",
+      status: "pending", // Await callback for completion
       paymentId: mpesaResponse.CheckoutRequestID,
       createdAt: new Date(),
-      metadata: { merchantRequestId: mpesaResponse.MerchantRequestID },
+      metadata: { 
+          merchantRequestId: mpesaResponse.MerchantRequestID, 
+          responseCode: mpesaResponse.ResponseCode,
+          responseDescription: mpesaResponse.ResponseDescription
+        },
     });
 
     return {
       success: true,
-      paymentId: mpesaResponse.CheckoutRequestID,
+      paymentId: mpesaResponse.CheckoutRequestID, // This is what you track
     };
-  } catch (error) {
-    console.error("M-Pesa payment error:", error);
-    return { success: false, error: "M-Pesa payment failed" };
+  } catch (error: any) {
+    console.error("M-Pesa payment processing error:", error);
+    let errorMessage = "M-Pesa payment failed.";
+    if (error.isAxiosError) {
+        const axiosError = error as AxiosError<any>;
+        if (axiosError.response?.data) {
+            errorMessage = axiosError.response.data.errorMessage || axiosError.response.data.message || JSON.stringify(axiosError.response.data);
+        } else {
+            errorMessage = axiosError.message;
+        }
+    } else if (error instanceof Error) {
+        errorMessage = error.message;
+    }
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -160,7 +197,7 @@ async function handleMockPayment(
   details: PaymentDetails
 ): Promise<PaymentResponse> {
   try {
-    const mockPaymentId = `mock_${Date.now()}`;
+    const mockPaymentId = `mock_${Date.now()}_${details.bookId.substring(0,5)}`;
 
     await recordTransaction({
       userId: details.userId,
@@ -168,7 +205,7 @@ async function handleMockPayment(
       amount: details.amount,
       currency: details.currency,
       paymentMethod: "mock",
-      status: "completed",
+      status: "completed", 
       paymentId: mockPaymentId,
       createdAt: new Date(),
     });
@@ -176,11 +213,12 @@ async function handleMockPayment(
     return {
       success: true,
       paymentId: mockPaymentId,
-      checkoutUrl: `/purchase-success/${details.bookId}?mock=true`,
+      // No clientSecret or checkoutUrl needed for mock if handled on same page
     };
   } catch (error) {
     console.error("Mock payment error:", error);
-    return { success: false, error: "Mock payment failed" };
+    const errorMessage = error instanceof Error ? error.message : "Mock payment processing failed.";
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -197,15 +235,15 @@ export async function processPayment(
     case "mock":
       return handleMockPayment(details);
     default:
-      return { success: false, error: "Invalid payment method" };
+      return { success: false, error: "Invalid payment method selected." };
   }
 }
 
-// Update transaction status
+// Update transaction status (typically called by webhook)
 export async function updateTransactionStatus(
-  paymentId: string,
+  paymentId: string, // For M-Pesa, this is CheckoutRequestID
   status: "completed" | "failed",
-  metadata?: Record<string, any>
+  updateMetadata?: Record<string, any> // Additional data from webhook (e.g., MpesaReceiptNumber)
 ) {
   try {
     const transactionQuery = query(
@@ -218,45 +256,33 @@ export async function updateTransactionStatus(
       const docRef = snapshot.docs[0].ref;
       const currentData = snapshot.docs[0].data();
 
-      const updateData: {
+      const dataToUpdate: {
         status: "completed" | "failed";
         metadata?: Record<string, any>;
+        updatedAt: Timestamp;
       } = {
         status,
-        ...(metadata && {
-          metadata: { ...currentData.metadata, ...metadata },
-        }),
+        updatedAt: Timestamp.now(),
       };
 
-      await updateDoc(docRef, updateData);
+      if (updateMetadata) {
+        dataToUpdate.metadata = { ...currentData.metadata, ...updateMetadata };
+      }
+
+      await updateDoc(docRef, dataToUpdate);
+      console.log(`Transaction ${docRef.id} (PaymentID: ${paymentId}) status updated to ${status}.`);
+      
+      // If payment completed successfully, you might trigger further actions here,
+      // like granting access to the book, sending a confirmation email, etc.
+      // This is especially important if the order creation was deferred until payment confirmation.
+      // In the current flow, order creation happens after payment submission by client,
+      // so this webhook is mainly for reconciliation and status updates.
+
+    } else {
+      console.warn(`Transaction with PaymentID ${paymentId} not found for status update.`);
     }
   } catch (error) {
     console.error("Error updating transaction status:", error);
-    throw error;
+    throw error; // Re-throw to be handled by the webhook processor if necessary
   }
 }
-/*export const updateUserInDb = async (uid: string, updates: Partial<Pick<User, 'name' | 'role'>>): Promise<User | null> => {
-  if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
-    throw new Error("Firebase Project ID not configured.");
-  }
-  const userDocRef = doc(db, USERS_COLLECTION, uid);
-  // Filter out undefined values from updates, Firestore doesn't like them
-  const validUpdates = Object.fromEntries(Object.entries(updates).filter(([_, v]) => v !== undefined));
-  
-  if (Object.keys(validUpdates).length === 0) {
-    // No actual updates to perform, return existing user data
-    return getUserDocumentFromDb(uid);
-  }
-
-  await updateDoc(userDocRef, validUpdates);
-  const updatedDoc = await getDoc(userDocRef);
-  if (updatedDoc.exists()) {
-    const userData = updatedDoc.data();
-     if (userData.createdAt && userData.createdAt instanceof Timestamp) {
-        userData.createdAt = userData.createdAt.toDate();
-      }
-    return { id: updatedDoc.id, ...userData } as User;
-  }
-  return null;
-};
-*/
