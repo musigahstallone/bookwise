@@ -9,10 +9,14 @@ import {
   where,
   updateDoc,
   doc,
+  limit,
 } from "firebase/firestore";
 import { createStripePaymentIntent } from "./stripe-integration";
-import { initiateStkPush } from "./mpesa-integration";
+import { initiateStkPush, type StkPushResponse } from "./mpesa-integration"; // Import StkPushResponse
 import type { AxiosError } from 'axios';
+import type { OrderItemInput, CreateOrderData } from "./actions/trackingActions"; // Import CreateOrderData
+import { handleCreateOrder } from "./actions/trackingActions";
+
 
 export type PaymentMethod = "stripe" | "mpesa" | "mock";
 
@@ -20,9 +24,11 @@ export interface PaymentDetails {
   amount: number; // For M-Pesa, this should be in KES. For Stripe, in smallest currency unit (e.g., cents).
   currency: string;
   userId: string;
-  bookId: string; // Can be a single book ID or a generic reference like "multiple_items"
+  items: OrderItemInput[]; // Changed from bookId to items array
   email?: string;
   phoneNumber?: string; // Normalized to 254xxxxxxxxx for M-Pesa
+  regionCode: string; // Added for currency context
+  itemCount: number; // Added for order context
 }
 
 export interface PaymentResponse {
@@ -30,32 +36,44 @@ export interface PaymentResponse {
   error?: string;
   paymentId?: string; // Stripe PaymentIntent ID or M-Pesa CheckoutRequestID
   clientSecret?: string; // For Stripe
-  checkoutUrl?: string; 
+  checkoutUrl?: string;
+  message?: string; // For user feedback e.g. on pending status
 }
 
 interface TransactionRecord {
   userId: string;
-  bookId: string;
-  amount: number; 
+  items: OrderItemInput[]; // Store full item details
+  amount: number;
   currency: string;
   paymentMethod: PaymentMethod;
   status: "pending" | "completed" | "failed";
-  paymentId?: string; 
-  createdAt: Date;
-  updatedAt?: Date;
-  metadata?: Record<string, any>;
+  paymentId?: string; // M-Pesa CheckoutRequestID or Stripe PaymentIntentID
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  metadata?: {
+    initialResponse?: any; // Store initial STK push API response
+    callbackResponse?: any; // Store M-Pesa callback (stkCallback object)
+    stripeClientSecret?: string;
+    [key: string]: any;
+  };
+  // Fields needed for creating order later
+  regionCode: string;
+  itemCount: number;
+  userEmail?: string; // Capture email if available for order creation context
 }
 
 const TRANSACTIONS_COLLECTION = "transactions";
 
 // Record a transaction in Firestore
-async function recordTransaction(transaction: TransactionRecord): Promise<string> {
+async function recordTransaction(transactionData: Omit<TransactionRecord, 'createdAt' | 'updatedAt' | 'paymentId'> & { paymentId: string }): Promise<string> {
   try {
+    const now = Timestamp.now();
     const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), {
-      ...transaction,
-      createdAt: Timestamp.fromDate(transaction.createdAt),
-      updatedAt: transaction.updatedAt ? Timestamp.fromDate(transaction.updatedAt) : Timestamp.fromDate(transaction.createdAt),
+      ...transactionData,
+      createdAt: now,
+      updatedAt: now,
     });
+    console.log(`Transaction recorded with ID: ${docRef.id} for paymentId: ${transactionData.paymentId}`);
     return docRef.id;
   } catch (error) {
     console.error("Error recording transaction:", error);
@@ -78,26 +96,28 @@ async function handleStripePayment(
     const stripeResponse = await createStripePaymentIntent(
       {
         secretKey: process.env.STRIPE_SECRET_KEY,
-        webhookSecret: process.env.STRIPE_WEBHOOK_SECRET, 
+        webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
       },
       {
-        amount: details.amount, 
+        amount: details.amount,
         currency: details.currency.toLowerCase(),
-        metadata: { userId: details.userId, bookId: details.bookId, orderReference: `BOOKWISE-${Date.now()}` },
+        metadata: { userId: details.userId, itemsCount: details.items.length.toString(), orderReference: `BOOKWISE-${Date.now()}` },
         receipt_email: details.email,
       }
     );
 
     await recordTransaction({
       userId: details.userId,
-      bookId: details.bookId,
-      amount: details.amount, 
+      items: details.items,
+      amount: details.amount, // For Stripe this is in cents, but store consistently if needed or convert
       currency: details.currency,
       paymentMethod: "stripe",
-      status: "pending", 
+      status: "pending", // Stripe payment can also be pending until webhook confirmation
       paymentId: stripeResponse.paymentIntentId,
-      createdAt: new Date(),
-      metadata: { clientSecret: stripeResponse.clientSecret }, 
+      metadata: { stripeClientSecret: stripeResponse.clientSecret, initialResponse: stripeResponse },
+      regionCode: details.regionCode,
+      itemCount: details.itemCount,
+      userEmail: details.email,
     });
 
     return {
@@ -120,7 +140,6 @@ async function handleMpesaPayment(
     if (!process.env.MPESA_CONSUMER_KEY || !process.env.MPESA_CONSUMER_SECRET || !process.env.MPESA_SHORTCODE || !process.env.MPESA_PASSKEY || !process.env.MPESA_CALLBACK_URL) {
       throw new Error("M-Pesa configuration is incomplete. Ensure all MPESA_ environment variables are set.");
     }
-
     if (!details.phoneNumber) {
       throw new Error("Phone number is required for M-Pesa payments.");
     }
@@ -128,20 +147,15 @@ async function handleMpesaPayment(
         throw new Error("M-Pesa payments must be in KES. Amount passed was in " + details.currency);
     }
 
-    // Sanitize AccountReference: Max 12 chars, alphanumeric. If bookId is long, use a generic one.
-    const accountRef = details.bookId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12) || "BookWiseOrder";
-    // Sanitize TransactionDesc: Max 100 chars.
-    const transactionDesc = `Purchase: ${details.bookId}`.substring(0, 100);
+    const accountRef = details.items.map(item => item.bookId).join(',').substring(0,10) + Date.now().toString().slice(-2) || "BookWiseOrder";
+    const transactionDesc = `Order of ${details.items.length} books`.substring(0, 100);
 
-    // For M-Pesa Sandbox, the API often expects the amount to be 1.
-    // We send 1 to the API if in sandbox, but record the actual transaction amount.
-    const mpesaApiAmount = process.env.MPESA_ENVIRONMENT === 'sandbox' ? 1 : details.amount;
-    if (process.env.MPESA_ENVIRONMENT === 'sandbox' && details.amount !== 1) {
+    const mpesaApiAmount = process.env.MPESA_ENVIRONMENT === 'sandbox' ? 1 : Math.round(details.amount);
+    if (process.env.MPESA_ENVIRONMENT === 'sandbox' && Math.round(details.amount) !== 1) {
         console.warn(`M-Pesa Sandbox: Original order amount KES ${details.amount} overridden to ${mpesaApiAmount} for API call.`);
     }
 
-
-    const mpesaResponse = await initiateStkPush(
+    const mpesaResponse: StkPushResponse = await initiateStkPush(
       {
         consumerKey: process.env.MPESA_CONSUMER_KEY,
         consumerSecret: process.env.MPESA_CONSUMER_SECRET,
@@ -151,59 +165,58 @@ async function handleMpesaPayment(
         environment: process.env.MPESA_ENVIRONMENT as "sandbox" | "production" || "sandbox",
       },
       {
-        phoneNumber: details.phoneNumber, // Expected to be normalized to 254xxxxxxxxx by PaymentHandler
-        amount: mpesaApiAmount, 
+        phoneNumber: details.phoneNumber,
+        amount: mpesaApiAmount,
         accountReference: accountRef,
         transactionDesc: transactionDesc,
       }
     );
 
-    // Check M-Pesa API response code for immediate failure
-    // A ResponseCode of "0" indicates the STK push was successfully initiated.
     if (mpesaResponse.ResponseCode !== "0") {
         console.error("M-Pesa STK Push initiation failed directly:", mpesaResponse);
-        // Use CustomerMessage if available, otherwise ResponseDescription
-        const apiErrorMessage = mpesaResponse.CustomerMessage || mpesaResponse.ResponseDescription || "M-Pesa STK push initiation failed. Please check details and try again.";
-        throw new Error(apiErrorMessage);
+        const apiErrorMessage = mpesaResponse.CustomerMessage || mpesaResponse.ResponseDescription || "M-Pesa STK push initiation failed.";
+        // Record a failed transaction attempt
+         await recordTransaction({
+          userId: details.userId,
+          items: details.items,
+          amount: details.amount,
+          currency: "KES",
+          paymentMethod: "mpesa",
+          status: "failed", // Mark as failed immediately
+          paymentId: mpesaResponse.CheckoutRequestID || `FAILED_INIT_${Date.now()}`,
+          metadata: { initialResponse: mpesaResponse },
+          regionCode: details.regionCode,
+          itemCount: details.itemCount,
+          userEmail: details.email,
+        });
+        return { success: false, error: apiErrorMessage, paymentId: mpesaResponse.CheckoutRequestID };
     }
-    
-    // Record the transaction with the *actual* order amount, not necessarily mpesaApiAmount
+
     await recordTransaction({
       userId: details.userId,
-      bookId: details.bookId,
-      amount: details.amount, // Record the actual KES amount of the order
+      items: details.items,
+      amount: details.amount,
       currency: "KES",
       paymentMethod: "mpesa",
-      status: "pending", // Await callback for completion
-      paymentId: mpesaResponse.CheckoutRequestID, // This is the ID to track
-      createdAt: new Date(),
-      metadata: { 
-          merchantRequestId: mpesaResponse.MerchantRequestID, 
-          initialResponseCode: mpesaResponse.ResponseCode,
-          initialResponseDescription: mpesaResponse.ResponseDescription
-        },
+      status: "pending",
+      paymentId: mpesaResponse.CheckoutRequestID,
+      metadata: { initialResponse: mpesaResponse },
+      regionCode: details.regionCode,
+      itemCount: details.itemCount,
+      userEmail: details.email,
     });
 
     return {
       success: true,
-      paymentId: mpesaResponse.CheckoutRequestID, 
+      paymentId: mpesaResponse.CheckoutRequestID,
+      message: "STK Push initiated. Please complete payment on your phone."
     };
   } catch (error: any) {
     console.error("M-Pesa payment processing error in handleMpesaPayment:", error);
     let errorMessage = "M-Pesa payment failed. Please try again later.";
-    // Try to extract a more specific message if available
     if (error.isAxiosError) {
         const axiosError = error as AxiosError<any>;
-        if (axiosError.response?.data) {
-            // Safaricom error messages can be in various places
-            errorMessage = axiosError.response.data.errorMessage || 
-                           axiosError.response.data.fault?.faultstring || 
-                           axiosError.response.data.CustomerMessage ||
-                           axiosError.response.data.ResponseDescription || 
-                           JSON.stringify(axiosError.response.data);
-        } else {
-            errorMessage = axiosError.message;
-        }
+        errorMessage = axiosError.response?.data?.errorMessage || axiosError.response?.data?.fault?.faultstring || axiosError.response?.data?.CustomerMessage || axiosError.response?.data?.ResponseDescription || JSON.stringify(axiosError.response?.data) || axiosError.message;
     } else if (error instanceof Error) {
         errorMessage = error.message;
     }
@@ -216,18 +229,34 @@ async function handleMockPayment(
   details: PaymentDetails
 ): Promise<PaymentResponse> {
   try {
-    const mockPaymentId = `mock_${Date.now()}_${details.bookId.substring(0,5)}`;
-
-    await recordTransaction({
+    const mockPaymentId = `mock_${Date.now()}_${details.items[0]?.bookId?.substring(0,5) || 'cart'}`;
+    const transactionFirebaseId = await recordTransaction({
       userId: details.userId,
-      bookId: details.bookId,
+      items: details.items,
       amount: details.amount,
       currency: details.currency,
       paymentMethod: "mock",
-      status: "completed", 
+      status: "completed",
       paymentId: mockPaymentId,
-      createdAt: new Date(),
+      regionCode: details.regionCode,
+      itemCount: details.itemCount,
+      userEmail: details.email,
     });
+
+    // For mock, directly create the order
+    const orderPayload: CreateOrderData = {
+        userId: details.userId,
+        items: details.items,
+        totalAmountUSD: details.currency === 'USD' ? details.amount : details.amount / 130, // Approximate if not USD
+        regionCode: details.regionCode,
+        currencyCode: details.currency,
+        itemCount: details.itemCount,
+        status: "completed",
+        paymentGatewayId: mockPaymentId,
+        paymentMethod: "mock",
+    };
+    await handleCreateOrder(orderPayload);
+
 
     return {
       success: true,
@@ -257,51 +286,120 @@ export async function processPayment(
   }
 }
 
-// Update transaction status (typically called by webhook)
-export async function updateTransactionStatus(
-  paymentId: string, // For M-Pesa, this is CheckoutRequestID; for Stripe, PaymentIntent ID
-  status: "completed" | "failed",
-  updateMetadata?: Record<string, any> 
+
+export async function updateTransactionAndCreateOrderIfNeeded(
+  paymentId: string, // M-Pesa CheckoutRequestID or Stripe PaymentIntent ID
+  callbackStatus: "completed" | "failed",
+  mpesaCallbackData?: any // Full stkCallback object for M-Pesa
 ): Promise<void> {
   try {
     const transactionQuery = query(
       collection(db, TRANSACTIONS_COLLECTION),
-      where("paymentId", "==", paymentId)
+      where("paymentId", "==", paymentId),
+      limit(1)
     );
     const snapshot = await getDocs(transactionQuery);
 
-    if (!snapshot.empty) {
-      const transactionDocRef = snapshot.docs[0].ref;
-      const currentData = snapshot.docs[0].data();
-
-      const dataToUpdate: {
-        status: "completed" | "failed";
-        metadata?: Record<string, any>;
-        updatedAt: Timestamp;
-      } = {
-        status,
-        updatedAt: Timestamp.now(),
-      };
-
-      if (updateMetadata) {
-        dataToUpdate.metadata = { ...(currentData.metadata || {}), ...updateMetadata };
-      }
-
-      await updateDoc(transactionDocRef, dataToUpdate);
-      console.log(`Transaction ${transactionDocRef.id} (PaymentGatewayID: ${paymentId}) status updated to ${status}.`);
-      
-      // TODO: If status is 'completed', trigger order fulfillment if not already done.
-      // For example, if order creation was deferred until payment confirmation.
-      // In the current app flow, order creation (handleCreateOrder in trackingActions)
-      // happens *after* the client gets a success from PaymentHandler,
-      // so this webhook is more for reconciliation and handling cases where client-side confirmation might fail.
-
-    } else {
-      console.warn(`Transaction with PaymentGatewayID ${paymentId} not found for status update. This might be okay if it's a very new transaction still being written, or an issue if the ID is incorrect.`);
+    if (snapshot.empty) {
+      console.warn(`Transaction with PaymentGatewayID ${paymentId} not found for status update or order creation.`);
+      return;
     }
+
+    const transactionDocRef = snapshot.docs[0].ref;
+    const transactionData = snapshot.docs[0].data() as TransactionRecord;
+
+    // Prevent re-processing completed/failed transactions that might receive duplicate webhooks
+    if (transactionData.status === "completed" || transactionData.status === "failed") {
+        console.log(`Transaction ${transactionDocRef.id} (PaymentID: ${paymentId}) already processed with status: ${transactionData.status}. Ignoring new callback.`);
+        return;
+    }
+    
+    const dataToUpdate: Partial<TransactionRecord> = {
+      status: callbackStatus,
+      updatedAt: Timestamp.now(),
+      metadata: { ...transactionData.metadata, callbackResponse: mpesaCallbackData || null },
+    };
+
+    await updateDoc(transactionDocRef, dataToUpdate);
+    console.log(`Transaction ${transactionDocRef.id} (PaymentID: ${paymentId}) status updated to ${callbackStatus}.`);
+
+    if (callbackStatus === "completed") {
+      // Create the order
+      const orderPayload: CreateOrderData = {
+        userId: transactionData.userId,
+        items: transactionData.items,
+        totalAmountUSD: transactionData.currency === 'USD' ? transactionData.amount : transactionData.amount / (process.env.KES_TO_USD_RATE ? parseFloat(process.env.KES_TO_USD_RATE) : 130), // Convert if KES, ensure rate exists
+        regionCode: transactionData.regionCode,
+        currencyCode: transactionData.currency,
+        itemCount: transactionData.itemCount,
+        status: "completed",
+        paymentGatewayId: paymentId,
+        paymentMethod: transactionData.paymentMethod,
+        // userEmail: transactionData.userEmail, // Add if userEmail is part of CreateOrderData
+      };
+      
+      console.log(`Creating order for successful transaction ${paymentId}. Payload:`, orderPayload);
+      await handleCreateOrder(orderPayload);
+      console.log(`Order created for transaction ${paymentId}.`);
+    } else {
+      console.log(`Payment ${paymentId} failed or was cancelled. No order created. Status: ${callbackStatus}`);
+    }
+
   } catch (error) {
-    console.error("Error updating transaction status in Firestore:", error);
-    // Don't re-throw here to prevent webhook from retrying indefinitely for Firestore issues,
-    // but log it thoroughly. Consider an alert mechanism for persistent failures.
+    console.error(`Error in updateTransactionAndCreateOrderIfNeeded for paymentId ${paymentId}:`, error);
   }
+}
+
+// This function is for Stripe webhooks that confirm PaymentIntent success
+export async function finalizeStripeTransactionAndCreateOrder(paymentIntentId: string, paymentIntent: any) {
+    try {
+        const transactionQuery = query(
+            collection(db, TRANSACTIONS_COLLECTION),
+            where("paymentId", "==", paymentIntentId),
+            where("paymentMethod", "==", "stripe"),
+            limit(1)
+        );
+        const snapshot = await getDocs(transactionQuery);
+
+        if (snapshot.empty) {
+            console.warn(`Stripe transaction with PaymentIntentID ${paymentIntentId} not found.`);
+            return;
+        }
+
+        const transactionDocRef = snapshot.docs[0].ref;
+        const transactionData = snapshot.docs[0].data() as TransactionRecord;
+
+        if (transactionData.status === "completed") {
+            console.log(`Stripe transaction ${paymentIntentId} already completed. Ignoring webhook.`);
+            return;
+        }
+        
+        const newStatus = paymentIntent.status === 'succeeded' ? 'completed' : 'failed';
+
+        await updateDoc(transactionDocRef, {
+            status: newStatus,
+            updatedAt: Timestamp.now(),
+            metadata: { ...transactionData.metadata, stripeWebhookResponse: paymentIntent },
+        });
+        console.log(`Stripe transaction ${paymentIntentId} status updated to ${newStatus} via webhook.`);
+
+        if (newStatus === 'completed') {
+             const orderPayload: CreateOrderData = {
+                userId: transactionData.userId,
+                items: transactionData.items,
+                totalAmountUSD: transactionData.amount / 100, // Convert cents to dollars
+                regionCode: transactionData.regionCode,
+                currencyCode: transactionData.currency, // This was 'usd' for stripe
+                itemCount: transactionData.itemCount,
+                status: "completed",
+                paymentGatewayId: paymentIntentId,
+                paymentMethod: "stripe",
+            };
+            await handleCreateOrder(orderPayload);
+            console.log(`Order created for successful Stripe payment ${paymentIntentId}.`);
+        }
+
+    } catch (error) {
+        console.error(`Error finalizing Stripe transaction and creating order for ${paymentIntentId}:`, error);
+    }
 }

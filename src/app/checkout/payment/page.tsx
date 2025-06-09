@@ -4,23 +4,25 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Loader2, ShieldCheck } from 'lucide-react';
 import { PaymentHandler } from '@/components/checkout/PaymentHandler';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData';
-import { handleCreateOrder, type OrderItemInput } from '@/lib/actions/trackingActions';
+// Order creation for M-Pesa is now handled by webhook. For mock/Stripe, it might still be client-triggered if immediate.
+// For this refactor, order creation for M-Pesa is removed from here.
+// import { handleCreateOrder, type OrderItemInput } from '@/lib/actions/trackingActions';
 import type { Book } from '@/data/books';
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
 import { type PaymentMethod } from '@/lib/payment-service';
 
 
 interface CheckoutData {
-  cartItems: Book[];
+  cartItems: Book[]; // Using Book type here, which aligns with OrderItemInput structure
   totalAmountUSD: number;
   selectedRegionCode: string;
-  currencyCode: string; 
+  currencyCode: string;
   itemCount: number;
 }
 
@@ -28,12 +30,12 @@ export default function PaymentPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { currentUser, isLoading: authIsLoading } = useAuth();
-  const { clearCart } = useCart();
+  const { clearCart } = useCart(); // Still need to clear cart on some success paths
 
   const [checkoutData, setCheckoutData] = useState<CheckoutData | null>(null);
   const [isLoadingPage, setIsLoadingPage] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isProcessingOrder, setIsProcessingOrder] = useState(false);
+  const [isProcessingOrder, setIsProcessingOrder] = useState(false); // For final steps AFTER payment handler gives success
 
   const [displayRegion, setDisplayRegion] = useState<Region>(defaultRegion);
   const [amountInSelectedCurrency, setAmountInSelectedCurrency] = useState(0);
@@ -57,8 +59,6 @@ export default function PaymentPage() {
         const convertedAmount = parsedData.totalAmountUSD * regionForDisplay.conversionRateToUSD;
         let finalDisplayAmount;
          if (regionForDisplay.currencyCode === 'KES') {
-            // For KES, round to nearest whole number for display, as M-Pesa typically deals with whole shillings.
-            // The actual amount sent to M-Pesa API might be 1 for sandbox.
             finalDisplayAmount = Math.round(convertedAmount);
         } else {
             finalDisplayAmount = parseFloat(convertedAmount.toFixed(2));
@@ -81,7 +81,6 @@ export default function PaymentPage() {
   const formatPriceInOrderCurrency = (amount: number, region: Region): string => {
     let formattedPrice;
     if (region.currencyCode === 'KES') {
-       // Display KES as a whole number
         formattedPrice = Math.round(amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     } else {
         formattedPrice = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -90,70 +89,50 @@ export default function PaymentPage() {
   };
 
 
-  const handlePaymentSuccess = async (paymentId: string, method: PaymentMethod) => {
+  const handlePaymentSuccess = async (paymentId: string, method: PaymentMethod, message?: string) => {
     if (!checkoutData || !currentUser) {
-      toast({
-        title: "Error",
-        description: "Missing checkout data or user not logged in.",
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: "Missing checkout data or user not logged in.", variant: "destructive" });
       setIsProcessingOrder(false);
       return;
     }
 
-    setIsProcessingOrder(true);
-    toast({ title: "Payment Confirmed", description: "Finalizing your order, please wait..." });
+    setIsProcessingOrder(true); // Indicates final client-side steps are running
 
-    const orderItems: OrderItemInput[] = checkoutData.cartItems.map(item => ({
-      bookId: item.id,
-      title: item.title,
-      price: item.price, 
-      coverImageUrl: item.coverImageUrl,
-      pdfUrl: item.pdfUrl,
-      dataAiHint: item.dataAiHint || 'book cover',
-    }));
-
-    try {
-      const orderResult = await handleCreateOrder(
-        currentUser.uid,
-        orderItems,
-        checkoutData.totalAmountUSD, 
-        checkoutData.selectedRegionCode,
-        checkoutData.currencyCode, 
-        checkoutData.itemCount,
-        paymentId, 
-        method 
-      );
-
-      if (orderResult.success && orderResult.orderId) {
-        await clearCart(true); 
-        sessionStorage.removeItem('bookwiseCheckoutData');
-        
-        toast({
-          title: "Payment Successful!",
-          description: "Order Received! Your order has been processed. You can view and download your purchased books on the 'My Orders' page.",
-          duration: 8000,
-        });
-        router.push(`/my-orders`);
-      } else {
-        toast({
-          title: "Order Creation Failed",
-          description: orderResult.message || "Could not process your order after payment. Payment ID: " + paymentId + ". Please contact support.",
-          variant: "destructive",
-          duration: 10000,
-        });
-      }
-    } catch (err) {
-      console.error("Error during order creation:", err);
-      toast({
-        title: "Checkout Error",
-        description: "An unexpected error occurred while finalizing your order. Payment ID: " + paymentId + ". Please contact support.",
-        variant: "destructive",
-        duration: 10000,
+    if (method === 'mpesa') {
+      toast({ 
+        title: "M-Pesa Processing", 
+        description: message || "STK Push sent. Please complete payment on your phone. Your order will appear in 'My Orders' once confirmed.",
+        duration: 10000 
       });
-    } finally {
-      setIsProcessingOrder(false);
+      await clearCart(true); // Clear cart after initiating M-Pesa
+      sessionStorage.removeItem('bookwiseCheckoutData');
+      router.push(`/my-orders`);
+      // Order creation for M-Pesa is now handled by the webhook.
+    } else if (method === 'stripe') {
+      // For Stripe, if paymentIntent status is 'succeeded' client-side, we might still create order here
+      // OR rely purely on webhook. Current setup: webhook (`finalizeStripeTransactionAndCreateOrder`) handles order creation.
+      // So, just show success and redirect.
+      toast({
+        title: "Stripe Payment Confirmed",
+        description: "Processing your order. It will appear in 'My Orders' shortly.",
+        duration: 8000,
+      });
+      await clearCart(true);
+      sessionStorage.removeItem('bookwiseCheckoutData');
+      router.push('/my-orders');
+    } else if (method === 'mock') {
+      // Mock payment's order creation is handled within payment-service.ts for simplicity
+      toast({
+        title: "Mock Payment Successful!",
+        description: "Order Received! Your order has been processed and will appear in 'My Orders'.",
+        duration: 8000,
+      });
+      await clearCart(true);
+      sessionStorage.removeItem('bookwiseCheckoutData');
+      router.push(`/my-orders`);
     }
+    // Any other methods would need their specific post-payment client handling here.
+    setIsProcessingOrder(false);
   };
 
 
@@ -219,17 +198,17 @@ export default function PaymentPage() {
             )}
           </Card>
           
-          {isProcessingOrder ? (
+          {isProcessingOrder ? ( // This state is for AFTER PaymentHandler success, for client-side cleanup/redirect
              <div className="flex flex-col items-center justify-center p-4 sm:p-6 text-center">
                 <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 animate-spin text-primary mb-2 sm:mb-3" />
-                <p className="text-md sm:text-lg font-semibold text-foreground">Finalizing your order...</p>
+                <p className="text-md sm:text-lg font-semibold text-foreground">Finalizing...</p>
                 <p className="text-xs sm:text-sm text-muted-foreground">Please do not refresh or close this page.</p>
             </div>
           ) : (
             <PaymentHandler
-                amount={checkoutData.totalAmountUSD} 
+                amount={checkoutData.totalAmountUSD} // Base USD for Stripe, KES for M-Pesa if currency is KES
                 userId={currentUser.uid}
-                bookId={checkoutData.cartItems[0]?.id || 'multiple_items'} 
+                items={checkoutData.cartItems} // Pass full cart items
                 email={currentUser.email || undefined}
                 onSuccess={handlePaymentSuccess}
                 onError={(errorMessage) => {
@@ -242,6 +221,8 @@ export default function PaymentPage() {
                 }}
                 currencyCodeForDisplay={displayRegion.currencyCode}
                 amountInSelectedCurrency={amountInSelectedCurrency}
+                regionCode={checkoutData.selectedRegionCode} // Pass regionCode
+                itemCount={checkoutData.itemCount} // Pass itemCount
             />
           )}
         </CardContent>
@@ -249,3 +230,4 @@ export default function PaymentPage() {
     </div>
   );
 }
+

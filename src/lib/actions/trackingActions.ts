@@ -67,8 +67,7 @@ export async function handleRecordDownload(bookId: string, userId: string) {
       downloadedAt: serverTimestamp(),
     });
 
-    revalidatePath('/admin/downloads'); // For admin to see updated counts
-    // No need to revalidate user-specific pages as the download happens client-side after this check
+    revalidatePath('/admin/downloads'); 
     return { success: true, message: 'Download recorded.' };
   } catch (error) {
     console.error('Error recording download:', error);
@@ -86,18 +85,26 @@ export interface OrderItemInput {
   dataAiHint?: string;
 }
 
-// Server Action to create an order
+// This interface defines the complete data needed to create an order.
+// It's used by the payment service webhook after a payment is confirmed.
+export interface CreateOrderData {
+    userId: string;
+    items: OrderItemInput[];
+    totalAmountUSD: number;
+    regionCode: string;
+    currencyCode: string;
+    itemCount: number;
+    status: "pending" | "completed" | "failed"; // Status of the order
+    paymentGatewayId?: string;
+    paymentMethod?: PaymentMethod;
+}
+
+
+// Server Action to create an order - now typically called by server-side logic (webhook)
 export async function handleCreateOrder(
-  userId: string,
-  items: OrderItemInput[],
-  totalAmountUSD: number,
-  regionCode: string, // Region code at time of checkout e.g. "US", "KE"
-  currencyCode: string, // Actual currency used for the transaction display e.g. "USD", "KES"
-  itemCount: number,
-  paymentGatewayId?: string, // ID from Stripe, M-Pesa, etc.
-  paymentMethod?: PaymentMethod // e.g. "stripe", "mpesa", "mock"
-) {
-  if (!userId) {
+  orderData: CreateOrderData
+): Promise<{ success: boolean; message?: string; orderId?: string }> {
+  if (!orderData.userId) {
     return { success: false, message: 'User not authenticated.' };
   }
    if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
@@ -106,20 +113,28 @@ export async function handleCreateOrder(
 
   try {
     const orderRef = await addDoc(collection(db, 'orders'), {
-      userId: userId,
-      items: items, // Array of enriched book item objects
-      totalAmountUSD: totalAmountUSD, // Always store the base USD amount
+      userId: orderData.userId,
+      items: orderData.items, 
+      totalAmountUSD: orderData.totalAmountUSD, 
       orderDate: serverTimestamp(),
-      regionCode: regionCode, // Store the region selected by user
-      currencyCode: currencyCode, // Store the currency the user saw
-      itemCount: itemCount,
-      status: 'completed', // Default status, could be 'pending' if webhooks are used
-      paymentGatewayId: paymentGatewayId || null,
-      paymentMethod: paymentMethod || null,
+      regionCode: orderData.regionCode,
+      currencyCode: orderData.currencyCode, 
+      itemCount: orderData.itemCount,
+      status: orderData.status, // Use the status passed in
+      paymentGatewayId: orderData.paymentGatewayId || null, 
+      paymentMethod: orderData.paymentMethod || null, 
     });
-    revalidatePath('/admin');
+    
+    console.log(`Order ${orderRef.id} created with status: ${orderData.status}`);
+    
+    // Revalidate paths that might display this new order
     revalidatePath('/admin/orders');
-    revalidatePath('/my-orders'); // Revalidate user's order history page
+    revalidatePath(`/my-orders`); // User's order history page
+    if (orderData.status === "completed") {
+        // Potentially revalidate other paths if a completed order affects them, e.g., dashboard stats
+        revalidatePath('/admin');
+    }
+
     return { success: true, message: 'Order created successfully.', orderId: orderRef.id };
   } catch (error) {
     console.error('Error creating order:', error);
@@ -127,4 +142,3 @@ export async function handleCreateOrder(
     return { success: false, message: `Failed to create order: ${errorMessage}` };
   }
 }
-

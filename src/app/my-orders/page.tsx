@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { History, Download, ShoppingBag, Loader2, AlertTriangle, CalendarDays, Hash, DollarSign, Package } from 'lucide-react';
+import { History, Download, ShoppingBag, Loader2, AlertTriangle, CalendarDays, Hash, DollarSign, Package, Info } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getOrdersByUserIdFromDb, type OrderWithUserDetails } from '@/lib/tracking-service-firebase';
 import { handleRecordDownload } from '@/lib/actions/trackingActions';
@@ -38,7 +38,7 @@ export default function MyOrdersPage() {
           setIsLoading(false);
         });
     } else if (!authIsLoading) {
-      setIsLoading(false);
+      setIsLoading(false); // Not logged in, not loading orders.
     }
   }, [currentUser, authIsLoading]);
 
@@ -52,19 +52,21 @@ export default function MyOrdersPage() {
             title: "Download Not Available",
             description: `The PDF for "${bookTitle}" is currently not available. Please contact support if you believe this is an error.`,
             variant: "destructive",
+            duration: 7000,
         });
         return;
     }
     try {
+      toast({ title: "Preparing Download...", description: `Checking download permissions for "${bookTitle}".`});
       const result = await handleRecordDownload(bookId, currentUser.uid);
       if (result.success) {
-        toast({ title: "Download Logged", description: `Preparing download for "${bookTitle}".` });
+        toast({ title: "Download Approved", description: `Starting download for "${bookTitle}".` });
         window.location.href = pdfUrl;
       } else {
-        toast({ title: "Download Denied", description: result.message, variant: "destructive" });
+        toast({ title: "Download Denied", description: result.message, variant: "destructive", duration: 7000 });
       }
     } catch (e: any) {
-      toast({ title: "Download Error", description: e.message || "An unexpected error occurred.", variant: "destructive" });
+      toast({ title: "Download Error", description: e.message || "An unexpected error occurred.", variant: "destructive", duration: 7000 });
     }
   };
 
@@ -81,8 +83,30 @@ export default function MyOrdersPage() {
     } else {
          displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    return `${orderCurrencyCode} ${displayPrice}`;
+    return `${orderRegion.currencyCode} ${displayPrice}`;
   };
+
+  const getStatusBadgeVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
+    switch (status.toLowerCase()) {
+        case 'completed': return 'default'; // Primary/Success color from theme
+        case 'pending': return 'secondary'; // Neutral/Pending color
+        case 'failed': return 'destructive'; // Destructive/Error color
+        default: return 'outline';
+    }
+  };
+   const getStatusBadgeColorClasses = (status: string): string => {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return 'bg-green-100 text-green-700 border-green-300';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+      case 'failed':
+        return 'bg-red-100 text-red-700 border-red-300';
+      default:
+        return 'bg-gray-100 text-gray-700 border-gray-300';
+    }
+  };
+
 
   if (isLoading || authIsLoading) {
     return (
@@ -122,7 +146,7 @@ export default function MyOrdersPage() {
         <ShoppingBag className="h-24 w-24 text-muted-foreground mb-6" />
         <h1 className="text-3xl font-headline font-bold text-primary mb-4">No Orders Yet</h1>
         <p className="text-lg text-muted-foreground mb-8 max-w-md">
-          You haven't placed any orders yet.
+          You haven't placed any orders yet. If you recently made a payment, it might be processing.
         </p>
         <Button asChild size="lg">
           <Link href="/shop">Start Shopping</Link>
@@ -164,7 +188,7 @@ export default function MyOrdersPage() {
                   </div>
                 </div>
               </div>
-               <Badge variant={order.status === 'completed' ? 'default' : 'secondary'} className="mt-2 w-fit capitalize bg-green-100 text-green-700 border-green-300">
+               <Badge variant={getStatusBadgeVariant(order.status)} className={`mt-2 w-fit capitalize ${getStatusBadgeColorClasses(order.status)}`}>
                   {order.status}
                </Badge>
             </CardHeader>
@@ -182,16 +206,23 @@ export default function MyOrdersPage() {
                         Price Paid: {formatOrderPrice(item.price, order.regionCode, order.currencyCode)}
                       </p>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full sm:w-auto mt-2 sm:mt-0"
-                      onClick={() => onDownloadClick(item.bookId, item.title, item.pdfUrl)}
-                      disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Download PDF
-                    </Button>
+                    {order.status === 'completed' ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full sm:w-auto mt-2 sm:mt-0"
+                        onClick={() => onDownloadClick(item.bookId, item.title, item.pdfUrl)}
+                        disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download PDF
+                      </Button>
+                    ) : (
+                      <div className="text-sm text-muted-foreground w-full sm:w-auto text-center sm:text-right mt-2 sm:mt-0">
+                        <Info className="inline h-4 w-4 mr-1" />
+                        Download available upon payment completion.
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

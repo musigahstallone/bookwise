@@ -1,16 +1,15 @@
 
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { verifyStripeWebhookSignature } from "@/lib/stripe-integration";
-import { updateTransactionStatus } from "@/lib/payment-service"; // Ensure this path is correct
+import { verifyStripeWebhookSignature, getStripeClient } from "@/lib/stripe-integration"; // getStripeClient for direct intent retrieval
+import { updateTransactionAndCreateOrderIfNeeded, finalizeStripeTransactionAndCreateOrder } from "@/lib/payment-service";
 
-// M-Pesa Callback Payload Structure (Simplified)
 interface MpesaStkCallbackItem {
   Name: string;
   Value: string | number;
 }
 interface MpesaStkCallbackResult {
-  ResultCode: number; // 0 for success
+  ResultCode: number; 
   ResultDesc: string;
   MerchantRequestID: string;
   CheckoutRequestID: string;
@@ -27,15 +26,11 @@ interface MpesaCallbackPayload {
 
 
 export async function POST(request: Request) {
-  const headersList = headers(); // Use this to get headers
-  const paymentProvider = headersList.get("x-payment-provider") || headersList.get("X-Payment-Provider"); // Check for case variations
+  const headersList = headers(); 
+  const paymentProvider = headersList.get("x-payment-provider") || headersList.get("X-Payment-Provider") || "unknown";
 
-  // Log all incoming headers for debugging
-  // console.log("Incoming Webhook Headers:", Object.fromEntries(headersList.entries()));
-  
-  // Log the raw body for debugging purposes, carefully in production
-  const rawBodyForLogging = await request.clone().text(); // Clone to read body without consuming it for parsers
-  // console.log("Incoming Webhook Raw Body for provider", paymentProvider, ":", rawBodyForLogging);
+  const rawBodyForLogging = await request.clone().text();
+  console.log(`Webhook received for provider: ${paymentProvider}. Raw Body: ${rawBodyForLogging}`);
 
 
   try {
@@ -58,83 +53,83 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Invalid Stripe webhook signature." }, { status: 400 });
       }
 
-      // Handle the event
-      let paymentIntent;
-      let status: "completed" | "failed" | "pending" = "pending";
-      let metadata: Record<string, any> = { stripeEvent: event.type };
+      console.log(`Stripe Webhook: Received event type ${event.type}`);
 
       switch (event.type) {
         case "payment_intent.succeeded":
-          paymentIntent = event.data.object;
-          status = "completed";
-          metadata.amount_received = paymentIntent.amount_received;
-          metadata.currency = paymentIntent.currency;
-          console.log(`Stripe Webhook: PaymentIntent ${paymentIntent.id} succeeded.`);
-          await updateTransactionStatus(paymentIntent.id, status, metadata);
+          const paymentIntentSucceeded = event.data.object;
+          console.log(`Stripe Webhook: PaymentIntent ${paymentIntentSucceeded.id} succeeded.`);
+          // Call a function to update transaction and create order
+          await finalizeStripeTransactionAndCreateOrder(paymentIntentSucceeded.id, paymentIntentSucceeded);
           break;
         case "payment_intent.payment_failed":
-          paymentIntent = event.data.object;
-          status = "failed";
-          metadata.failure_message = paymentIntent.last_payment_error?.message;
-          metadata.failure_code = paymentIntent.last_payment_error?.code;
-          console.log(`Stripe Webhook: PaymentIntent ${paymentIntent.id} failed. Reason: ${metadata.failure_message}`);
-          await updateTransactionStatus(paymentIntent.id, status, metadata);
+          const paymentIntentFailed = event.data.object;
+          console.log(`Stripe Webhook: PaymentIntent ${paymentIntentFailed.id} failed. Reason: ${paymentIntentFailed.last_payment_error?.message}`);
+          // Update transaction to failed, no order created
+          await updateTransactionAndCreateOrderIfNeeded(paymentIntentFailed.id, "failed", { stripeEvent: event.type, error: paymentIntentFailed.last_payment_error });
           break;
-        // Add other event types as needed (e.g., payment_intent.processing, payment_intent.canceled)
+        // Add other Stripe event types as needed (e.g., payment_intent.processing, payment_intent.canceled)
         default:
           console.log(`Stripe Webhook: Unhandled event type ${event.type}`);
       }
       return NextResponse.json({ received: true, event: event.type });
 
     } else if (paymentProvider === "mpesa") {
-      const mpesaCallback: MpesaCallbackPayload = await request.json();
-      // console.log("Parsed M-Pesa Callback:", JSON.stringify(mpesaCallback, null, 2));
+      const mpesaCallback: MpesaCallbackPayload = JSON.parse(rawBodyForLogging); // Use the already cloned body
+      console.log("Parsed M-Pesa Callback:", JSON.stringify(mpesaCallback, null, 2));
 
       if (!mpesaCallback.Body || !mpesaCallback.Body.stkCallback) {
-        console.error("M-Pesa webhook: Invalid callback structure.");
+        console.error("M-Pesa webhook: Invalid callback structure received.");
         return NextResponse.json({ ResultCode: 1, ResultDesc: "Invalid callback structure received." }, { status: 400 });
       }
 
       const { stkCallback } = mpesaCallback.Body;
-      const { CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata } = stkCallback;
+      const { CheckoutRequestID, ResultCode } = stkCallback;
       
-      const mpesaMetadata: Record<string, any> = { 
-        mpesaResultCode: ResultCode,
-        mpesaResultDesc: ResultDesc,
-        merchantRequestID: stkCallback.MerchantRequestID,
-      };
+      console.log(`M-Pesa Webhook: Processing callback for CheckoutRequestID ${CheckoutRequestID}, ResultCode: ${ResultCode}`);
 
-      if (CallbackMetadata && Array.isArray(CallbackMetadata.Item)) {
-        CallbackMetadata.Item.forEach(item => {
-          mpesaMetadata[item.Name] = item.Value;
-        });
-      }
-      
-      // Log the M-Pesa receipt number if available
-      if (mpesaMetadata.MpesaReceiptNumber) {
-         console.log(`M-Pesa Webhook: Received MpesaReceiptNumber ${mpesaMetadata.MpesaReceiptNumber} for CheckoutRequestID ${CheckoutRequestID}`);
-      }
-
-
-      await updateTransactionStatus(
+      await updateTransactionAndCreateOrderIfNeeded(
         CheckoutRequestID,
         ResultCode === 0 ? "completed" : "failed",
-        mpesaMetadata
+        stkCallback // Pass the whole stkCallback object as metadata
       );
       
       // Acknowledge Safaricom
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Callback received successfully." });
 
     } else {
-      console.warn(`Webhook: Unknown payment provider: ${paymentProvider}`);
-      return NextResponse.json({ error: "Unknown payment provider specified in x-payment-provider header." }, { status: 400 });
+      // If provider is unknown or not set, try to infer based on body structure (basic attempt)
+      try {
+         const parsedBody = JSON.parse(rawBodyForLogging);
+         if (parsedBody.Body && parsedBody.Body.stkCallback) { // Looks like M-Pesa
+            console.warn("Webhook: Payment provider header missing, but body looks like M-Pesa. Processing as M-Pesa.");
+            const mpesaCallback: MpesaCallbackPayload = parsedBody;
+            const { stkCallback } = mpesaCallback.Body;
+            const { CheckoutRequestID, ResultCode } = stkCallback;
+             await updateTransactionAndCreateOrderIfNeeded(
+                CheckoutRequestID,
+                ResultCode === 0 ? "completed" : "failed",
+                stkCallback
+            );
+            return NextResponse.json({ ResultCode: 0, ResultDesc: "Callback received successfully (inferred M-Pesa)." });
+         } else if (parsedBody.type && parsedBody.type.startsWith('payment_intent.')) { // Looks like Stripe
+            console.warn("Webhook: Payment provider header missing, but body looks like Stripe. Processing as Stripe.");
+            // Re-verify signature if possible, or log & proceed cautiously if header was genuinely missed by sender
+            // For now, if header is missing, we can't verify Stripe signature robustly.
+            // This path is risky without the stripe-signature header.
+            console.error("Stripe webhook inferred, but 'stripe-signature' header is missing. Cannot process securely.");
+            return NextResponse.json({ error: "Inferred Stripe event, but signature missing." }, { status: 400 });
+         }
+      } catch (parseError) {
+        // Not JSON or not a recognized structure
+      }
+      console.warn(`Webhook: Unknown or missing payment provider: ${paymentProvider}. Body: ${rawBodyForLogging.substring(0,200)}...`);
+      return NextResponse.json({ error: "Unknown payment provider or malformed request." }, { status: 400 });
     }
 
   } catch (error: any) {
     console.error("Webhook processing error:", error);
-    // For M-Pesa, if it's their callback, they expect a specific format on error too.
-    // But for a general error, a 500 is appropriate.
-    if (paymentProvider === "mpesa") {
+    if (paymentProvider === "mpesa" || (rawBodyForLogging.includes("stkCallback") && rawBodyForLogging.includes("Body")) ) { // Check if it might be an M-Pesa error
         return NextResponse.json({ ResultCode: 1, ResultDesc: "Webhook processing failed internally." }, { status: 500 });
     }
     return NextResponse.json({ error: "Webhook processing failed: " + error.message }, { status: 500 });
