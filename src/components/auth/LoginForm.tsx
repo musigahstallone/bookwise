@@ -11,6 +11,7 @@ import { Loader2 } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
+import Link from 'next/link'; // Added Link
 
 export default function LoginForm() {
   const [email, setEmail] = useState('');
@@ -88,7 +89,14 @@ export default function LoginForm() {
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="password-login" className="text-base">Password</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password-login" className="text-base">Password</Label>
+          <Link href="/forgot-password" passHref legacyBehavior>
+            <a className="text-sm text-primary hover:underline">
+              Forgot Password?
+            </a>
+          </Link>
+        </div>
         <Input
           id="password-login" 
           type="password"
