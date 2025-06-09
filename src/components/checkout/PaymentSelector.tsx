@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { PaymentMethod } from '@/lib/payment-service';
 import Image from 'next/image';
-import { CreditCard, Smartphone } from 'lucide-react'; // Using lucide icons
+import { CreditCard, Smartphone, Layers } from 'lucide-react'; // Added Layers for Mock
 
 interface PaymentSelectorProps {
     onSelect: (method: PaymentMethod) => void;
@@ -20,8 +20,7 @@ const paymentOptions = [
         id: "stripe", 
         label: "Credit/Debit Card", 
         icons: [
-            { src: "/visa.svg", alt: "Visa", width: 30, height: 18 },
-            { src: "/mastercard.svg", alt: "Mastercard", width: 30, height: 18 }
+            { src: "/payment-providers/stripe.svg", alt: "Stripe", width: 50, height: 20 } // Updated path
         ],
         lucideIcon: <CreditCard className="h-5 w-5 text-primary mr-2" />
     },
@@ -29,7 +28,7 @@ const paymentOptions = [
         value: "mpesa" as PaymentMethod, 
         id: "mpesa", 
         label: "M-Pesa", 
-        icons: [{ src: "/mpesa.svg", alt: "M-Pesa", width: 60, height: 20 }],
+        icons: [{ src: "/payment-providers/mpesa.jpg", alt: "M-Pesa", width: 70, height: 20 }], // Updated path & dimensions
         lucideIcon: <Smartphone className="h-5 w-5 text-green-600 mr-2" />
     },
 ];
@@ -41,7 +40,7 @@ if (process.env.NODE_ENV === 'development') {
         label: "Test Payment (Mock)",
         description: "Development Only",
         icons: [],
-        lucideIcon: <CreditCard className="h-5 w-5 text-gray-500 mr-2" />
+        lucideIcon: <Layers className="h-5 w-5 text-gray-500 mr-2" /> // Changed icon for mock
     });
 }
 
@@ -68,9 +67,9 @@ export function PaymentSelector({ onSelect, selectedMethod, disabled }: PaymentS
                             <span className="font-medium text-sm sm:text-base">{option.label}</span>
                             {option.description && <p className="text-xs text-muted-foreground">{option.description}</p>}
                         </div>
-                        <div className="flex space-x-1.5 items-center">
+                        <div className="flex space-x-1.5 items-center h-6"> {/* Set fixed height for icon container */}
                             {option.icons.map(icon => (
-                                <Image key={icon.alt} src={icon.src} alt={icon.alt} width={icon.width} height={icon.height} />
+                                <Image key={icon.alt} src={icon.src} alt={icon.alt} width={icon.width} height={icon.height} style={{ objectFit: 'contain' }} />
                             ))}
                         </div>
                     </Label>
@@ -79,3 +78,4 @@ export function PaymentSelector({ onSelect, selectedMethod, disabled }: PaymentS
         </Card>
     );
 }
+
