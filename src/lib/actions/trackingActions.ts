@@ -12,6 +12,8 @@ import {
   getCountFromServer,
   Timestamp,
 } from 'firebase/firestore';
+import type { PaymentMethod } from '@/lib/payment-service';
+
 
 const BOOK_DOWNLOADS_COLLECTION = 'bookDownloads';
 const MAX_DAILY_DOWNLOADS_PER_BOOK = 2;
@@ -78,7 +80,7 @@ export async function handleRecordDownload(bookId: string, userId: string) {
 export interface OrderItemInput {
   bookId: string;
   title: string;
-  price: number; // Price at the time of purchase
+  price: number; // Price at the time of purchase (USD)
   coverImageUrl: string;
   pdfUrl: string;
   dataAiHint?: string;
@@ -89,9 +91,11 @@ export async function handleCreateOrder(
   userId: string,
   items: OrderItemInput[],
   totalAmountUSD: number,
-  regionCode: string,
-  currencyCode: string,
-  itemCount: number
+  regionCode: string, // Region code at time of checkout e.g. "US", "KE"
+  currencyCode: string, // Actual currency used for the transaction display e.g. "USD", "KES"
+  itemCount: number,
+  paymentGatewayId?: string, // ID from Stripe, M-Pesa, etc.
+  paymentMethod?: PaymentMethod // e.g. "stripe", "mpesa", "mock"
 ) {
   if (!userId) {
     return { success: false, message: 'User not authenticated.' };
@@ -104,12 +108,14 @@ export async function handleCreateOrder(
     const orderRef = await addDoc(collection(db, 'orders'), {
       userId: userId,
       items: items, // Array of enriched book item objects
-      totalAmountUSD: totalAmountUSD,
+      totalAmountUSD: totalAmountUSD, // Always store the base USD amount
       orderDate: serverTimestamp(),
-      regionCode: regionCode,
-      currencyCode: currencyCode,
+      regionCode: regionCode, // Store the region selected by user
+      currencyCode: currencyCode, // Store the currency the user saw
       itemCount: itemCount,
-      status: 'completed', // Default status
+      status: 'completed', // Default status, could be 'pending' if webhooks are used
+      paymentGatewayId: paymentGatewayId || null,
+      paymentMethod: paymentMethod || null,
     });
     revalidatePath('/admin');
     revalidatePath('/admin/orders');
@@ -121,3 +127,4 @@ export async function handleCreateOrder(
     return { success: false, message: `Failed to create order: ${errorMessage}` };
   }
 }
+
