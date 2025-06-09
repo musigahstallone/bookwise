@@ -212,7 +212,7 @@ export default function MyOrdersPage() {
                         variant="outline"
                         className="w-full sm:w-auto mt-2 sm:mt-0"
                         onClick={() => onDownloadClick(item.bookId, item.title, item.pdfUrl)}
-                        disabled={!item.pdfUrl || pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
+                        disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
                       >
                         <Download className="mr-2 h-4 w-4" />
                         Download PDF
