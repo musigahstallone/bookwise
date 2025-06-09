@@ -6,17 +6,14 @@ import {
   doc, 
   Timestamp,
   getDocs,
+  getDoc, // Added for fetching single order
   query,
   orderBy,
   where
 } from 'firebase/firestore';
 import { getUserDocumentFromDb } from './user-service-firebase';
 import { getBookByIdFromDb } from './book-service-firebase';
-import type { OrderItemInput } from './actions/trackingActions';
-
-
-const BOOK_DOWNLOADS_COLLECTION = 'bookDownloads';
-const ORDERS_COLLECTION = 'orders';
+import type { OrderItemInput, OrderStatus } from './actions/trackingActions';
 
 
 export interface OrderWithUserDetails {
@@ -24,14 +21,63 @@ export interface OrderWithUserDetails {
   userId: string;
   userName?: string;
   userEmail?: string;
-  items: OrderItemInput[]; // Now uses the enriched OrderItemInput
+  items: OrderItemInput[];
   totalAmountUSD: number;
+  actualAmountPaid: number; // Amount in the currency the order was paid in
   orderDate: Date; // Converted from Timestamp
   regionCode: string;
   currencyCode: string;
   itemCount: number;
-  status: string;
+  status: OrderStatus;
+  paymentGatewayId?: string;
+  paymentMethod?: string;
+  lastUpdatedAt: Date;
 }
+
+export const getOrderByIdFromDb = async (orderId: string, userId?: string): Promise<OrderWithUserDetails | null> => {
+  if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+    console.warn("Firebase Project ID not configured. Returning null for order fetch.");
+    return null;
+  }
+  try {
+    const orderDocRef = doc(db, 'orders', orderId);
+    const orderDocSnap = await getDoc(orderDocRef);
+
+    if (orderDocSnap.exists()) {
+      const orderData = orderDocSnap.data();
+      // Security check: if userId is provided, ensure it matches the order's userId
+      if (userId && orderData.userId !== userId) {
+        console.warn(`User ${userId} attempted to fetch order ${orderId} belonging to another user.`);
+        return null; // Or throw an authorization error
+      }
+
+      const user = await getUserDocumentFromDb(orderData.userId);
+
+      return {
+        id: orderDocSnap.id,
+        userId: orderData.userId,
+        userName: user?.name,
+        userEmail: user?.email,
+        items: orderData.items as OrderItemInput[],
+        totalAmountUSD: orderData.totalAmountUSD,
+        actualAmountPaid: orderData.actualAmountPaid,
+        orderDate: (orderData.orderDate as Timestamp).toDate(),
+        lastUpdatedAt: (orderData.lastUpdatedAt as Timestamp)?.toDate() || (orderData.orderDate as Timestamp).toDate(),
+        regionCode: orderData.regionCode,
+        currencyCode: orderData.currencyCode,
+        itemCount: orderData.itemCount,
+        status: orderData.status as OrderStatus,
+        paymentGatewayId: orderData.paymentGatewayId,
+        paymentMethod: orderData.paymentMethod,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error fetching order with ID ${orderId} from Firestore:`, error);
+    return null;
+  }
+};
+
 
 export const getAllOrdersWithUserDetailsFromDb = async (): Promise<OrderWithUserDetails[]> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
@@ -54,11 +100,15 @@ export const getAllOrdersWithUserDetailsFromDb = async (): Promise<OrderWithUser
         userEmail: user?.email,
         items: orderData.items as OrderItemInput[],
         totalAmountUSD: orderData.totalAmountUSD,
+        actualAmountPaid: orderData.actualAmountPaid,
         orderDate: (orderData.orderDate as Timestamp).toDate(),
+        lastUpdatedAt: (orderData.lastUpdatedAt as Timestamp)?.toDate() || (orderData.orderDate as Timestamp).toDate(),
         regionCode: orderData.regionCode,
         currencyCode: orderData.currencyCode,
         itemCount: orderData.itemCount,
-        status: orderData.status || 'completed',
+        status: orderData.status as OrderStatus,
+        paymentGatewayId: orderData.paymentGatewayId,
+        paymentMethod: orderData.paymentMethod,
       });
     }
     return ordersList;
@@ -70,11 +120,9 @@ export const getAllOrdersWithUserDetailsFromDb = async (): Promise<OrderWithUser
 
 export const getOrdersByUserIdFromDb = async (userId: string): Promise<OrderWithUserDetails[]> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
-    console.warn("Firebase Project ID not configured. Returning empty array for user orders.");
     return [];
   }
   if (!userId) {
-    console.warn("User ID not provided for fetching orders. Returning empty array.");
     return [];
   }
 
@@ -87,19 +135,20 @@ export const getOrdersByUserIdFromDb = async (userId: string): Promise<OrderWith
     const ordersSnapshot = await getDocs(ordersQuery);
     const ordersList: OrderWithUserDetails[] = ordersSnapshot.docs.map(orderDoc => {
       const orderData = orderDoc.data();
-      // User details (name, email) are not fetched here to keep it simpler for user-specific page
-      // If needed, they could be fetched, or assumed to be available from AuthContext client-side
       return {
         id: orderDoc.id,
         userId: orderData.userId,
-        // userName and userEmail could be omitted or fetched if necessary
         items: orderData.items as OrderItemInput[],
         totalAmountUSD: orderData.totalAmountUSD,
+        actualAmountPaid: orderData.actualAmountPaid,
         orderDate: (orderData.orderDate as Timestamp).toDate(),
+        lastUpdatedAt: (orderData.lastUpdatedAt as Timestamp)?.toDate() || (orderData.orderDate as Timestamp).toDate(),
         regionCode: orderData.regionCode,
         currencyCode: orderData.currencyCode,
         itemCount: orderData.itemCount,
-        status: orderData.status || 'completed',
+        status: orderData.status as OrderStatus,
+        paymentGatewayId: orderData.paymentGatewayId,
+        paymentMethod: orderData.paymentMethod,
       };
     });
     return ordersList;
@@ -151,3 +200,6 @@ export const getAllDownloadsWithDetailsFromDb = async (): Promise<DownloadWithDe
     return [];
   }
 };
+
+
+    

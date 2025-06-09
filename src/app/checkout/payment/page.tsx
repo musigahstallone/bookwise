@@ -1,30 +1,34 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { Loader2, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { PaymentHandler } from '@/components/checkout/PaymentHandler';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData';
-import type { Book } from '@/data/books';
+import type { Book } from '@/data/books'; // Full Book type for items
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
 import { type PaymentMethod } from '@/lib/payment-service';
+import { getOrderByIdFromDb, type OrderWithUserDetails } from '@/lib/tracking-service-firebase'; // For retry
+import type { OrderItemInput } from '@/lib/actions/trackingActions';
 
 
 interface CheckoutData {
-  cartItems: Book[]; 
-  totalAmountUSD: number;
+  items: OrderItemInput[]; // Use OrderItemInput from the start
+  totalAmountUSD: number; // Base USD total
   selectedRegionCode: string;
   currencyCode: string; // Currency code of the selected region for display
   itemCount: number;
+  orderIdToRetry?: string; // For retrying a specific order
 }
 
-export default function PaymentPage() {
+function PaymentPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const { currentUser, isLoading: authIsLoading } = useAuth();
   const { clearCart, isLoading: cartIsLoading } = useCart();
@@ -38,46 +42,105 @@ export default function PaymentPage() {
 
 
   useEffect(() => {
-    const dataString = sessionStorage.getItem('bookwiseCheckoutData');
-    if (dataString) {
-      try {
-        const parsedData: CheckoutData = JSON.parse(dataString);
-        if (!parsedData.cartItems || parsedData.cartItems.length === 0) {
-          setError("No items in cart for checkout. Please return to your cart.");
-          setCheckoutData(null);
+    const loadData = async () => {
+      setIsLoadingPage(true);
+      setError(null);
+      const orderIdToRetry = searchParams.get('order_id');
+      const retryPaymentFlag = searchParams.get('retry_payment');
+
+      if (orderIdToRetry && retryPaymentFlag === 'true') {
+        if (!currentUser) {
+          setError("Please log in to retry your payment.");
           setIsLoadingPage(false);
           return;
         }
-        setCheckoutData(parsedData);
-        const regionForDisplay = getRegionByCode(parsedData.selectedRegionCode) || defaultRegion;
-        setDisplayRegion(regionForDisplay);
-
-        const convertedAmount = parsedData.totalAmountUSD * regionForDisplay.conversionRateToUSD;
-        let finalDisplayAmount;
-         if (regionForDisplay.currencyCode === 'KES') {
-            finalDisplayAmount = Math.round(convertedAmount);
-        } else {
-            finalDisplayAmount = parseFloat(convertedAmount.toFixed(2));
+        try {
+          const orderToRetry = await getOrderByIdFromDb(orderIdToRetry, currentUser.uid);
+          if (orderToRetry && (orderToRetry.status === 'failed' || orderToRetry.status === 'pending')) {
+            const regionForDisplay = getRegionByCode(orderToRetry.regionCode) || defaultRegion;
+            const convertedAmount = orderToRetry.totalAmountUSD * regionForDisplay.conversionRateToUSD;
+            const finalDisplayAmount = regionForDisplay.currencyCode === 'KES' ? Math.round(convertedAmount) : parseFloat(convertedAmount.toFixed(2));
+            
+            setCheckoutData({
+              items: orderToRetry.items.map(item => ({ // Ensure mapping to OrderItemInput
+                bookId: item.bookId,
+                title: item.title,
+                price: item.price, // Price should be from the original order item
+                coverImageUrl: item.coverImageUrl,
+                pdfUrl: item.pdfUrl,
+                dataAiHint: item.dataAiHint,
+              })),
+              totalAmountUSD: orderToRetry.totalAmountUSD,
+              selectedRegionCode: orderToRetry.regionCode,
+              currencyCode: orderToRetry.currencyCode,
+              itemCount: orderToRetry.itemCount,
+              orderIdToRetry: orderIdToRetry,
+            });
+            setDisplayRegion(regionForDisplay);
+            setAmountInSelectedCurrency(finalDisplayAmount);
+          } else if (orderToRetry && orderToRetry.status === 'completed') {
+            setError(`Order ${orderIdToRetry} is already completed. No payment needed.`);
+             setTimeout(() => router.push(`/orders/${orderIdToRetry}`), 3000);
+          } 
+          else {
+            setError(`Could not find order ${orderIdToRetry} to retry, or it's not in a retryable state.`);
+          }
+        } catch (e) {
+          console.error("Error fetching order to retry:", e);
+          setError("Could not load order details for retry. Please try again from 'My Orders'.");
         }
-        setAmountInSelectedCurrency(finalDisplayAmount);
+      } else {
+        const dataString = sessionStorage.getItem('bookwiseCheckoutData');
+        if (dataString) {
+          try {
+            const parsedData: Omit<CheckoutData, 'items'> & { cartItems: Book[] } = JSON.parse(dataString); // cartItems is Book[] from session
+            if (!parsedData.cartItems || parsedData.cartItems.length === 0) {
+              setError("No items in cart for checkout. Please return to your cart.");
+              setCheckoutData(null);
+            } else {
+              const regionForDisplay = getRegionByCode(parsedData.selectedRegionCode) || defaultRegion;
+              const convertedAmount = parsedData.totalAmountUSD * regionForDisplay.conversionRateToUSD;
+              const finalDisplayAmount = regionForDisplay.currencyCode === 'KES' ? Math.round(convertedAmount) : parseFloat(convertedAmount.toFixed(2));
 
-      } catch (e) {
-        console.error("Error parsing checkout data from session storage:", e);
-        setError("Could not load checkout details. Please try again from your cart.");
-        setCheckoutData(null);
+              setCheckoutData({
+                items: parsedData.cartItems.map(book => ({ // Map Book to OrderItemInput
+                    bookId: book.id,
+                    title: book.title,
+                    price: book.price, // This is USD price from book catalog
+                    coverImageUrl: book.coverImageUrl,
+                    pdfUrl: book.pdfUrl,
+                    dataAiHint: book.dataAiHint,
+                })),
+                totalAmountUSD: parsedData.totalAmountUSD,
+                selectedRegionCode: parsedData.selectedRegionCode,
+                currencyCode: parsedData.currencyCode,
+                itemCount: parsedData.itemCount,
+              });
+              setDisplayRegion(regionForDisplay);
+              setAmountInSelectedCurrency(finalDisplayAmount);
+            }
+          } catch (e) {
+            console.error("Error parsing checkout data from session storage:", e);
+            setError("Could not load checkout details. Please try again from your cart.");
+            setCheckoutData(null);
+          }
+        } else {
+          setError("No checkout information found. Redirecting to shop...");
+          setCheckoutData(null);
+          router.replace('/shop'); // Redirect if no data
+        }
       }
-    } else {
-      setError("No checkout information found. Please start from your cart.");
-      setCheckoutData(null);
+      setIsLoadingPage(false);
+    };
+    if (!authIsLoading) { // Only load data once auth state is resolved
+        loadData();
     }
-    setIsLoadingPage(false);
-  }, []);
+  }, [searchParams, router, currentUser, authIsLoading]);
 
 
   const formatPriceInOrderCurrency = (amount: number, region: Region): string => {
     let formattedPrice;
     if (region.currencyCode === 'KES') {
-        // Ensure KES is always displayed as a whole number if it's an integer
         if (Math.abs(amount - Math.round(amount)) < 0.005) {
              formattedPrice = Math.round(amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         } else {
@@ -86,41 +149,57 @@ export default function PaymentPage() {
     } else {
          formattedPrice = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    return `${region.currencyCode} ${formattedPrice}`;
+    return `${region.currencySymbol}${formattedPrice}`;
   };
 
-  // This function is called by PaymentHandler upon successful initiation or completion.
-  const handlePaymentInitiationSuccess = async (paymentId: string, method: PaymentMethod, message?: string) => {
+  const handlePaymentInitiationSuccess = async (orderId: string, paymentGatewayId: string, method: PaymentMethod, message?: string) => {
     if (!checkoutData || !currentUser) {
       toast({ title: "Error", description: "Missing checkout data or user not logged in.", variant: "destructive" });
       return;
     }
     
-    await clearCart(true); // Clear cart from client-side (context and localStorage/Firestore)
-    sessionStorage.removeItem('bookwiseCheckoutData');
+    // Clear cart only if this wasn't a retry of an existing order
+    if (!checkoutData.orderIdToRetry) {
+      await clearCart(true); 
+      sessionStorage.removeItem('bookwiseCheckoutData');
+    }
 
+    let toastMessage = message || "Payment initiated. Your order is being processed.";
     if (method === 'mpesa') {
-      toast({ 
-        title: "M-Pesa Processing", 
-        description: message || "STK Push sent. Please complete payment on your phone. Your order will appear in 'My Orders' once confirmed.",
-        duration: 10000 
-      });
+      toastMessage = message || "STK Push sent. Please complete payment on your phone. Your order is being processed.";
     } else if (method === 'stripe') {
-      toast({
-        title: "Stripe Payment Processing",
-        description: message || "Processing your payment. Your order will appear in 'My Orders' shortly upon confirmation.",
-        duration: 8000,
-      });
+       toastMessage = message || "Processing your Stripe payment. Your order status will update shortly.";
     } else if (method === 'mock') {
-       toast({
-        title: "Mock Payment Successful!",
-        description: message || "Order Received! Your order has been processed and will appear in 'My Orders'.",
-        duration: 8000,
-      });
+       toastMessage = message || "Mock Payment Successful! Order created.";
     }
     
-    router.push(`/my-orders`); // Redirect to My Orders for all methods after initiation/success
+    toast({ 
+        title: method === 'mock' ? "Mock Payment Complete!" : "Payment Processing", 
+        description: `${toastMessage} You will be redirected to view your order.`,
+        duration: 10000 
+    });
+    
+    router.push(`/orders/${orderId}`);
   };
+
+  const handlePaymentError = (errorMessage: string, orderId?: string) => {
+    toast({
+        title: "Payment Error",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 7000,
+    });
+    if (orderId) {
+      // If an orderId exists (meaning a pending order was created or we are retrying)
+      // keep the user on the payment page, or redirect them to the specific order page to retry.
+      // For now, we'll keep them here, error is shown by PaymentHandler.
+      // Or, if it's a retry:
+      if (checkoutData?.orderIdToRetry) {
+        router.push(`/orders/${checkoutData.orderIdToRetry}?payment_failed=true`);
+      }
+    }
+    // If no orderId, it implies a very early failure, let user retry or select another method.
+  }
 
 
   if (authIsLoading || isLoadingPage || cartIsLoading) {
@@ -132,14 +211,14 @@ export default function PaymentPage() {
     );
   }
 
-  if (error || !checkoutData || !checkoutData.cartItems || checkoutData.cartItems.length === 0) {
+  if (error || !checkoutData || !checkoutData.items || checkoutData.items.length === 0) {
     return (
       <div className="container max-w-2xl mx-auto py-8 px-4">
         <ErrorDisplay
             title="Payment Page Error"
-            message={error || "Could not load payment details or cart is empty. Please return to your cart."}
+            message={error || "Could not load payment details or cart is empty. Please return to your cart or shop."}
             showHomeButton={false}
-            retryAction={() => router.push('/cart')}
+            retryAction={() => router.push(checkoutData?.orderIdToRetry ? `/orders/${checkoutData.orderIdToRetry}` : '/cart')}
             className="max-w-2xl mx-auto"
         />
       </div>
@@ -152,31 +231,36 @@ export default function PaymentPage() {
         <ErrorDisplay
             title="Authentication Required"
             message="You need to be logged in to complete the payment."
-            retryAction={() => router.push(`/login?redirectUrl=/checkout/payment`)}
+            retryAction={() => router.push(`/login?redirectUrl=/checkout/payment${checkoutData.orderIdToRetry ? `?order_id=${checkoutData.orderIdToRetry}&retry_payment=true` : ''}`)}
             showHomeButton={false}
             className="max-w-2xl mx-auto"
         />
       </div>
     )
   }
-
-  // Map Book[] to OrderItemInput[]
-  const orderItemsForPayment: OrderItemInput[] = checkoutData.cartItems.map(book => ({
-    bookId: book.id,
-    title: book.title,
-    price: book.price, // Assuming book.price is already in USD here, or adjust as needed
-    coverImageUrl: book.coverImageUrl,
-    pdfUrl: book.pdfUrl,
-    dataAiHint: book.dataAiHint || 'book cover',
+  
+  // Determine API amount and currency based on selected payment method contextually in PaymentHandler
+  // For now, pass base USD and display currency details. PaymentHandler will decide final API values.
+  const itemsForPaymentHandler: OrderItemInput[] = checkoutData.items.map(item => ({
+    bookId: item.bookId,
+    title: item.title,
+    // price for OrderItemInput should be the price in the order's currency if retrying,
+    // or the base USD price from catalog if new order
+    price: checkoutData.orderIdToRetry ? item.price : item.price, // Assuming item.price is already correct from source
+    coverImageUrl: item.coverImageUrl,
+    pdfUrl: item.pdfUrl,
+    dataAiHint: item.dataAiHint,
   }));
+
 
   return (
     <div className="container max-w-2xl mx-auto py-6 sm:py-8 px-2 sm:px-4">
       <Card className="shadow-xl w-full">
         <CardHeader className="text-center">
           <ShieldCheck className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-primary mb-2 sm:mb-3" />
-          <CardTitle className="text-2xl sm:text-3xl font-headline">Secure Checkout</CardTitle>
-          <CardDescription className="text-sm sm:text-base">Complete your purchase for BookWise.</CardDescription>
+          <CardTitle className="text-2xl sm:text-3xl font-headline">{checkoutData.orderIdToRetry ? `Retry Payment for Order` : `Secure Checkout`}</CardTitle>
+          {checkoutData.orderIdToRetry && <CardDescription className="text-sm sm:text-base">Order ID: {checkoutData.orderIdToRetry}</CardDescription>}
+          {!checkoutData.orderIdToRetry && <CardDescription className="text-sm sm:text-base">Complete your purchase for BookWise.</CardDescription>}
         </CardHeader>
         <CardContent className="space-y-4 sm:space-y-6 p-4 sm:p-6">
           <Card className="p-3 sm:p-4 border rounded-lg bg-muted/30">
@@ -197,26 +281,35 @@ export default function PaymentPage() {
           </Card>
           
           <PaymentHandler
-              amount={checkoutData.totalAmountUSD} // Base USD total
+              amountUSD={checkoutData.totalAmountUSD}
               userId={currentUser.uid}
-              items={orderItemsForPayment} 
+              items={itemsForPaymentHandler} 
               email={currentUser.email || undefined}
-              onSuccess={handlePaymentInitiationSuccess} // Renamed for clarity
-              onError={(errorMessage) => {
-              toast({
-                  title: "Payment Error",
-                  description: errorMessage,
-                  variant: "destructive",
-                  duration: 7000,
-              });
-              }}
-              currencyCodeForDisplay={displayRegion.currencyCode} // e.g. KES, EUR
-              amountInSelectedCurrency={amountInSelectedCurrency} // Actual numeric value in display currency
-              regionCode={checkoutData.selectedRegionCode}
+              onSuccess={handlePaymentInitiationSuccess}
+              onError={handlePaymentError}
+              regionCode={checkoutData.selectedRegionCode} // Pass the region code of the order
               itemCount={checkoutData.itemCount}
+              // No currencyCodeForDisplay or amountInSelectedCurrency here, PaymentHandler calculates from regionCode and amountUSD
           />
         </CardContent>
       </Card>
     </div>
   );
 }
+
+
+export default function PaymentPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg text-muted-foreground">Loading Payment Details...</p>
+      </div>
+    }>
+      <PaymentPageContent />
+    </Suspense>
+  );
+}
+
+
+    

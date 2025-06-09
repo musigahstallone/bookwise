@@ -8,16 +8,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { 
         method, 
-        amount, // For Stripe, this is in cents (USD). For M-Pesa, this should be KES.
+        amount, // For Stripe, this is in cents (USD). For M-Pesa, this should be KES (actual value).
         currency, // "usd" for Stripe, "KES" for M-Pesa.
         userId, 
         items, 
         email, 
         phoneNumber, // For M-Pesa
         regionCode, 
-        itemCount   
+        itemCount,
+        actualAmountInSelectedCurrency // The amount user sees and pays in their selected currency
     }: { 
-        method: PaymentMethod, // Use the imported type
+        method: PaymentMethod,
         amount: number, 
         currency: string, 
         userId: string, 
@@ -25,38 +26,45 @@ export async function POST(request: Request) {
         email?: string, 
         phoneNumber?:string,
         regionCode: string,
-        itemCount: number
+        itemCount: number,
+        actualAmountInSelectedCurrency: number;
     } = body;
 
-    if (!method || amount === undefined || !currency || !userId || !items || items.length === 0 || !regionCode || itemCount === undefined ) {
-      console.error("Missing required fields in /api/payment:", {method, amount, currency, userId, items_length: items?.length, regionCode, itemCount});
+    const requiredFields: (keyof typeof body)[] = ['method', 'amount', 'currency', 'userId', 'items', 'regionCode', 'itemCount', 'actualAmountInSelectedCurrency'];
+    const missingFields = requiredFields.filter(field => body[field] === undefined || (field === 'items' && (!Array.isArray(body.items) || body.items.length === 0)));
+
+    if (missingFields.length > 0) {
+      console.error("Missing required fields in /api/payment:", missingFields.join(', '), "Full body:", body);
       return NextResponse.json(
-        { error: "Missing required fields (method, amount, currency, userId, items, regionCode, itemCount)" },
+        { error: `Missing required fields: ${missingFields.join(', ')}` },
         { status: 400 }
       );
     }
 
     const paymentDetails: PaymentDetails = {
-        amount,
+        amount, // This is the API-specific amount (cents for stripe, KES for mpesa)
         currency,
         userId,
         items,
         email,
-        phoneNumber, // Will be undefined for Stripe, present for M-Pesa
+        phoneNumber,
         regionCode,
         itemCount,
+        actualAmountInSelectedCurrency, // Amount in the currency the user selected/pays in
     };
 
-    console.log(`Processing payment via API route for method: ${method}, user: ${userId}, amount: ${amount} ${currency}`);
-    const response = await processPayment(method, paymentDetails);
+    console.log(`Processing payment via API route for method: ${method}, user: ${userId}, amount: ${amount} ${currency}, actualDisplayAmount: ${actualAmountInSelectedCurrency} ${currency}`);
+    const paymentApiResponse = await processPayment(method, paymentDetails); // processPayment now creates pending order first
 
-    if (!response.success) {
-      console.error(`Payment processing failed in API for method ${method}:`, response.error);
-      return NextResponse.json({ error: response.error || "Payment processing failed at API route" }, { status: 400 });
+    if (!paymentApiResponse.success) {
+      console.error(`Payment processing failed in API for method ${method}:`, paymentApiResponse.error);
+      // Return the orderId even on failure, so client can link to the failed/pending order
+      return NextResponse.json({ error: paymentApiResponse.error || "Payment processing failed at API route", orderId: paymentApiResponse.orderId }, { status: 400 });
     }
     
-    console.log(`Payment processing successful in API for method ${method}. Response:`, response);
-    return NextResponse.json(response);
+    console.log(`Payment processing successful in API for method ${method}. Response:`, paymentApiResponse);
+    // Return orderId along with other details like clientSecret for Stripe
+    return NextResponse.json(paymentApiResponse);
 
   } catch (error) {
     console.error("Payment processing error in API route:", error);
@@ -67,3 +75,6 @@ export async function POST(request: Request) {
     );
   }
 }
+
+
+    

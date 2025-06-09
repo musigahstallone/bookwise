@@ -11,6 +11,8 @@ import {
   where,
   getCountFromServer,
   Timestamp,
+  doc,
+  updateDoc,
 } from 'firebase/firestore';
 import type { PaymentMethod } from '@/lib/payment-service';
 
@@ -67,7 +69,7 @@ export async function handleRecordDownload(bookId: string, userId: string) {
       downloadedAt: serverTimestamp(),
     });
 
-    revalidatePath('/admin/downloads'); 
+    revalidatePath('/admin/downloads');
     return { success: true, message: 'Download recorded.' };
   } catch (error) {
     console.error('Error recording download:', error);
@@ -79,26 +81,29 @@ export async function handleRecordDownload(bookId: string, userId: string) {
 export interface OrderItemInput {
   bookId: string;
   title: string;
-  price: number; // Price at the time of purchase (USD or KES, matching order currency)
+  price: number; // Price at the time of purchase (e.g. KES for M-Pesa, USD for Stripe based on order's currency)
   coverImageUrl: string;
   pdfUrl: string;
   dataAiHint?: string;
 }
 
+export type OrderStatus = "pending" | "completed" | "failed" | "cancelled";
+
 export interface CreateOrderData {
     userId: string;
     items: OrderItemInput[];
-    totalAmountUSD: number; // Always store a USD equivalent for consistent reporting if needed
-    regionCode: string;
-    currencyCode: string; // The currency the order was placed in (e.g. KES, USD)
+    totalAmountUSD: number; // Base USD total for consistent internal value
+    regionCode: string;     // Region used for the order
+    currencyCode: string;   // Currency the order was placed/paid in (e.g., KES, USD)
+    actualAmountPaid: number; // The amount in currencyCode (e.g., 1300 KES, 10 USD)
     itemCount: number;
-    status: "pending" | "completed" | "failed"; // Status of the order
+    status: OrderStatus;
     paymentGatewayId?: string; // e.g., M-Pesa CheckoutRequestID or Stripe PaymentIntentID
     paymentMethod?: PaymentMethod;
 }
 
 
-// Server Action to create an order - now typically called by server-side logic (webhook or successful mock)
+// Server Action to create an order
 export async function handleCreateOrder(
   orderData: CreateOrderData
 ): Promise<{ success: boolean; message?: string; orderId?: string }> {
@@ -110,34 +115,38 @@ export async function handleCreateOrder(
   }
 
   try {
-    // Ensure items are correctly structured for Firestore (e.g., no undefined values for optional fields if Firestore rules disallow)
     const cleanItems = orderData.items.map(item => ({
         bookId: item.bookId,
         title: item.title,
-        price: item.price, // This should be the price in the order's currency (e.g. KES for M-Pesa)
+        price: item.price, // Should be price in order's currency
         coverImageUrl: item.coverImageUrl,
         pdfUrl: item.pdfUrl,
         dataAiHint: item.dataAiHint || 'book',
     }));
 
 
-    const orderRef = await addDoc(collection(db, 'orders'), {
+    const orderDocData = {
       userId: orderData.userId,
-      items: cleanItems, 
-      totalAmountUSD: orderData.totalAmountUSD, 
+      items: cleanItems,
+      totalAmountUSD: orderData.totalAmountUSD,
+      actualAmountPaid: orderData.actualAmountPaid,
       orderDate: serverTimestamp(),
       regionCode: orderData.regionCode,
-      currencyCode: orderData.currencyCode, 
+      currencyCode: orderData.currencyCode,
       itemCount: orderData.itemCount,
-      status: orderData.status,
-      paymentGatewayId: orderData.paymentGatewayId || null, 
-      paymentMethod: orderData.paymentMethod || null, 
-    });
+      status: orderData.status, // "pending", "completed", "failed"
+      paymentGatewayId: orderData.paymentGatewayId || null,
+      paymentMethod: orderData.paymentMethod || null,
+      lastUpdatedAt: serverTimestamp(),
+    };
+    
+    const orderRef = await addDoc(collection(db, 'orders'), orderDocData);
     
     console.log(`Order ${orderRef.id} created with status: ${orderData.status}`);
     
     revalidatePath('/admin/orders');
-    revalidatePath(`/my-orders`); 
+    revalidatePath(`/my-orders`);
+    revalidatePath(`/orders/${orderRef.id}`);
     if (orderData.status === "completed") {
         revalidatePath('/admin'); // For dashboard stats
     }
@@ -149,3 +158,34 @@ export async function handleCreateOrder(
     return { success: false, message: `Failed to create order: ${errorMessage}` };
   }
 }
+
+export async function updateOrderStatus(orderId: string, status: OrderStatus, paymentDetails?: { paymentGatewayId?: string; paymentMethod?: PaymentMethod }) {
+  if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+    return { success: false, message: "Firebase Project ID not configured." };
+  }
+  try {
+    const orderDocRef = doc(db, 'orders', orderId);
+    const updateData: any = { status, lastUpdatedAt: serverTimestamp() };
+    if (paymentDetails?.paymentGatewayId) {
+      updateData.paymentGatewayId = paymentDetails.paymentGatewayId;
+    }
+    if (paymentDetails?.paymentMethod) {
+      updateData.paymentMethod = paymentDetails.paymentMethod;
+    }
+    await updateDoc(orderDocRef, updateData);
+
+    revalidatePath('/admin/orders');
+    revalidatePath(`/my-orders`);
+    revalidatePath(`/orders/${orderId}`);
+    if (status === "completed") {
+      revalidatePath('/admin');
+    }
+    return { success: true, message: `Order ${orderId} status updated to ${status}.` };
+  } catch (error) {
+    console.error(`Error updating order ${orderId} status:`, error);
+    return { success: false, message: 'Failed to update order status.' };
+  }
+}
+
+
+    
