@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { History, ShoppingBag, Loader2, AlertTriangle, CalendarDays, Hash, DollarSign, Eye, ExternalLink, Info } from 'lucide-react';
+import { History, ShoppingBag, Loader2, AlertTriangle, CalendarDays, Hash, Eye, Info } from 'lucide-react'; // Removed DollarSign, ExternalLink
 import { useAuth } from '@/contexts/AuthContext';
 import { getOrdersByUserIdFromDb, type OrderWithUserDetails } from '@/lib/tracking-service-firebase';
 import { useToast } from '@/hooks/use-toast';
@@ -42,7 +42,12 @@ export default function MyOrdersPage() {
   }, [currentUser, authIsLoading]);
 
 
-  const formatOrderPrice = (totalAmount: number, orderCurrencyCode: string, orderRegionCode: string) => {
+  const formatOrderPrice = (totalAmount?: number, orderCurrencyCode?: string, orderRegionCode?: string) => {
+    // Add a defensive check for totalAmount
+    if (typeof totalAmount !== 'number' || isNaN(totalAmount) || !orderCurrencyCode || !orderRegionCode) {
+      return `${orderCurrencyCode || ''} N/A`; 
+    }
+
     const resolvedRegion = getRegionByCode(orderRegionCode) || defaultRegion;
     // totalAmount here is actualAmountPaid in order's currency
     let displayPrice;
@@ -153,7 +158,7 @@ export default function MyOrdersPage() {
                     {order.status}
                   </Badge>
                   <div className="text-md sm:text-lg font-semibold text-primary flex items-center">
-                    <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 mr-1 shrink-0" />
+                    {/* Replaced DollarSign icon with direct display of currency */}
                     Total: {formatOrderPrice(order.actualAmountPaid, order.currencyCode, order.regionCode)}
                   </div>
                 </div>
@@ -170,9 +175,16 @@ export default function MyOrdersPage() {
           </Card>
         ))}
       </div>
+       <div className="mt-8 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-700 rounded-md text-sm">
+        <p className="font-bold flex items-center"><Info className="mr-2 h-5 w-5" />Order Status Info:</p>
+        <ul className="list-disc pl-5 mt-1 space-y-0.5">
+            <li><strong>Pending:</strong> Payment is being processed (e.g., waiting for M-Pesa confirmation).</li>
+            <li><strong>Completed:</strong> Payment successful. You can download your books from the order details page.</li>
+            <li><strong>Failed:</strong> Payment was not successful. You can try again from the order details page.</li>
+            <li><strong>Cancelled:</strong> The order was cancelled.</li>
+        </ul>
+      </div>
     </div>
   );
 }
 
-
-    

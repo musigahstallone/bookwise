@@ -34,6 +34,8 @@ export interface OrderWithUserDetails {
   lastUpdatedAt: Date;
 }
 
+const ORDERS_COLLECTION = "orders";
+
 export const getOrderByIdFromDb = async (orderId: string, userId?: string): Promise<OrderWithUserDetails | null> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
     console.warn("Firebase Project ID not configured. Returning null for order fetch.");
