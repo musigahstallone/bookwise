@@ -20,7 +20,7 @@ interface CheckoutData {
   cartItems: Book[];
   totalAmountUSD: number;
   selectedRegionCode: string;
-  currencyCode: string; // Currency code of the selected region (USD, EUR, KES)
+  currencyCode: string; 
   itemCount: number;
 }
 
@@ -51,7 +51,7 @@ export default function PaymentPage() {
         const convertedAmount = parsedData.totalAmountUSD * regionForDisplay.conversionRateToUSD;
         let finalDisplayAmount;
          if (regionForDisplay.currencyCode === 'KES') {
-            if (Math.abs(convertedAmount - Math.round(convertedAmount)) < 0.005) { // Check if close to whole number
+            if (Math.abs(convertedAmount - Math.round(convertedAmount)) < 0.005) { 
                 finalDisplayAmount = Math.round(convertedAmount);
             } else {
                 finalDisplayAmount = parseFloat(convertedAmount.toFixed(2));
@@ -104,7 +104,7 @@ export default function PaymentPage() {
     const orderItems: OrderItemInput[] = checkoutData.cartItems.map(item => ({
       bookId: item.id,
       title: item.title,
-      price: item.price, // Store original USD price
+      price: item.price, 
       coverImageUrl: item.coverImageUrl,
       pdfUrl: item.pdfUrl,
       dataAiHint: item.dataAiHint || 'book cover',
@@ -114,36 +114,28 @@ export default function PaymentPage() {
       const orderResult = await handleCreateOrder(
         currentUser.uid,
         orderItems,
-        checkoutData.totalAmountUSD, // Store total in USD for consistency
+        checkoutData.totalAmountUSD, 
         checkoutData.selectedRegionCode,
-        checkoutData.currencyCode, // Store the currency code of the transaction
+        checkoutData.currencyCode, 
         checkoutData.itemCount,
-        paymentId, // Store the payment ID from the gateway
-        method // Store the payment method used
+        paymentId, 
+        method 
       );
 
       if (orderResult.success && orderResult.orderId) {
-        await clearCart(true); // Clear Firestore cart silently
+        await clearCart(true); 
         sessionStorage.removeItem('bookwiseCheckoutData');
-
-        // Prepare data for order summary page
-        const purchasedItemsForSummary = orderItems.map(item => ({
-          id: item.bookId,
-          title: item.title,
-          price: item.price, // USD price
-          coverImageUrl: item.coverImageUrl,
-          pdfUrl: item.pdfUrl,
-          dataAiHint: item.dataAiHint,
-        }));
-        sessionStorage.setItem('lastPurchasedItems', JSON.stringify(purchasedItemsForSummary));
-        // Store the region code used for the transaction for consistent display on summary
-        sessionStorage.setItem('lastPurchasedRegionCode', checkoutData.selectedRegionCode); 
+        
+        // No longer saving data for /order-summary
+        // sessionStorage.removeItem('lastPurchasedItems'); 
+        // sessionStorage.removeItem('lastPurchasedRegionCode');
 
         toast({
           title: "Payment Successful!",
-          description: "Your order has been recorded. Redirecting...",
+          description: "Order Received! Your order has been processed. You can view and download your purchased books on the 'My Orders' page.",
+          duration: 7000,
         });
-        router.push(`/order-summary`);
+        router.push(`/my-orders`); // Redirect to my-orders page
       } else {
         toast({
           title: "Order Creation Failed",
@@ -228,9 +220,9 @@ export default function PaymentPage() {
             </div>
           ) : (
             <PaymentHandler
-                amount={checkoutData.totalAmountUSD} // Pass base USD amount for Stripe
+                amount={checkoutData.totalAmountUSD} 
                 userId={currentUser.uid}
-                bookId={checkoutData.cartItems[0]?.id || 'multiple_items'} // Simplified for now
+                bookId={checkoutData.cartItems[0]?.id || 'multiple_items'} 
                 email={currentUser.email || undefined}
                 onSuccess={handlePaymentSuccess}
                 onError={(errorMessage) => {
@@ -249,3 +241,4 @@ export default function PaymentPage() {
     </div>
   );
 }
+

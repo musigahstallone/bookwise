@@ -9,20 +9,44 @@ import { type PaymentMethod } from '@/lib/payment-service';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertTriangle } from 'lucide-react';
+import { getRegionByCode, defaultRegion } from '@/data/regionData'; // Import for KES conversion
 
 interface PaymentHandlerProps {
-    amount: number; // Base amount in USD for Stripe, KES for M-Pesa
+    amount: number; // Base amount in USD for Stripe
     userId: string;
-    bookId: string; // Assuming single book purchase for simplicity in this example
+    bookId: string; 
     email?: string;
-    onSuccess: (paymentId: string, method: PaymentMethod) => void; // Pass method back
+    onSuccess: (paymentId: string, method: PaymentMethod) => void;
     onError: (error: string) => void;
-    currencyCodeForDisplay: string; // e.g. "USD", "KES" for display on card
-    amountInSelectedCurrency: number; // Amount in the currency selected by user (USD, EUR, KES)
+    currencyCodeForDisplay: string; 
+    amountInSelectedCurrency: number; 
 }
 
+// Helper function to normalize Kenyan phone numbers to 254xxxxxxxxx format
+const normalizeKenyanPhoneNumber = (phoneNumber: string): string => {
+    let normalized = phoneNumber.trim();
+    if (normalized.startsWith('+254')) {
+        normalized = normalized.substring(1); // Remove +
+    }
+    if (normalized.startsWith('07')) {
+        normalized = '254' + normalized.substring(1);
+    } else if (normalized.startsWith('01')) {
+        normalized = '254' + normalized.substring(1);
+    }
+    // Add more rules if needed, e.g. for '7' or '1' directly
+    if (normalized.length === 9 && (normalized.startsWith('7') || normalized.startsWith('1'))) {
+        normalized = '254' + normalized;
+    }
+    // Basic validation for final format
+    if (!/^254(7\d{8}|1\d{8})$/.test(normalized)) {
+        throw new Error("Invalid Kenyan phone number format after normalization.");
+    }
+    return normalized;
+};
+
+
 export function PaymentHandler({
-    amount, // This should be USD amount for Stripe logic
+    amount, 
     userId,
     bookId,
     email,
@@ -32,16 +56,17 @@ export function PaymentHandler({
     amountInSelectedCurrency,
 }: PaymentHandlerProps) {
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>();
-    const [isProcessing, setIsProcessing] = useState(false); // General processing state
-    const [isPreparingPayment, setIsPreparingPayment] = useState(false); // For API calls before form display
+    const [isProcessing, setIsProcessing] = useState(false); 
+    const [isPreparingPayment, setIsPreparingPayment] = useState(false); 
     const [error, setError] = useState<string>();
     
-    // Stripe specific state
     const [stripeClientSecret, setStripeClientSecret] = useState<string>();
     const [stripePaymentIntentId, setStripePaymentIntentId] = useState<string>();
 
-    // M-Pesa specific state (amount will be converted if needed)
-    const mpesaAmountKES = currencyCodeForDisplay === 'KES' ? amountInSelectedCurrency : Math.round(amount * 130.50); // Example: use actual KES amount if pre-calculated, else convert USD
+    const kenyaRegion = getRegionByCode('KE') || defaultRegion; // Get KES conversion rate
+    const mpesaAmountKES = currencyCodeForDisplay === 'KES' 
+        ? Math.round(amountInSelectedCurrency) // If already KES, use it (rounded)
+        : Math.round(amount * kenyaRegion.conversionRateToUSD); // Convert USD base to KES
 
     const handlePaymentMethodSelect = async (method: PaymentMethod) => {
         setPaymentMethod(method);
@@ -52,7 +77,6 @@ export function PaymentHandler({
         if (method === 'stripe') {
             setIsPreparingPayment(true);
             try {
-                // Amount for Stripe should be in cents
                 const amountInCents = Math.round(amount * 100); 
 
                 const response = await fetch('/api/payment', {
@@ -60,8 +84,8 @@ export function PaymentHandler({
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         method: 'stripe',
-                        amount: amountInCents, // Send amount in cents
-                        currency: 'usd', // Stripe charges in USD for this setup
+                        amount: amountInCents, 
+                        currency: 'usd', 
                         userId,
                         bookId,
                         email
@@ -80,35 +104,36 @@ export function PaymentHandler({
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to initialize Stripe payment. Please try a different method or refresh.';
                 setError(message);
-                onError(message); // Notify parent
+                onError(message); 
             } finally {
                 setIsPreparingPayment(false);
             }
         }
     };
 
-    const handleMpesaSubmit = async (phoneNumber: string) => {
+    const handleMpesaSubmit = async (rawPhoneNumber: string) => {
         setIsProcessing(true);
         setError(undefined);
 
         try {
+            const normalizedPhoneNumber = normalizeKenyanPhoneNumber(rawPhoneNumber);
+
             const response = await fetch('/api/payment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     method: 'mpesa',
-                    amount: mpesaAmountKES, // Send KES amount
+                    amount: mpesaAmountKES, 
                     currency: 'KES',
                     userId,
                     bookId,
-                    phoneNumber
+                    phoneNumber: normalizedPhoneNumber // Send normalized number
                 })
             });
 
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || "M-Pesa STK push failed.");
-            // For M-Pesa, success here means STK push initiated. Actual confirmation via webhook.
-            // For mock flow, we assume success and proceed.
+            
             onSuccess(data.paymentId, 'mpesa'); 
         } catch (err) {
             const message = err instanceof Error ? err.message : 'M-Pesa payment failed. Please check your number and try again.';
@@ -123,8 +148,7 @@ export function PaymentHandler({
         setIsProcessing(true);
         setError(undefined);
         try {
-            // In a real scenario, you might still hit an API endpoint for mock
-             await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+             await new Promise(resolve => setTimeout(resolve, 1000)); 
             const mockPaymentId = `mock_${Date.now()}_${bookId}`;
             onSuccess(mockPaymentId, 'mock');
         } catch (err) {
@@ -140,7 +164,6 @@ export function PaymentHandler({
         if (stripePaymentIntentId) {
             onSuccess(stripePaymentIntentId, 'stripe');
         } else {
-            // This case should ideally not happen if clientSecret was set
             onError("Stripe payment completed, but Payment Intent ID is missing.");
         }
     };
@@ -179,7 +202,7 @@ export function PaymentHandler({
 
                 {paymentMethod === 'mpesa' && !isPreparingPayment && (
                     <MpesaForm
-                        amount={mpesaAmountKES} // Display KES amount
+                        amount={mpesaAmountKES} 
                         onSubmit={handleMpesaSubmit}
                         isLoading={isProcessing}
                     />
@@ -199,3 +222,4 @@ export function PaymentHandler({
         </div>
     );
 }
+
