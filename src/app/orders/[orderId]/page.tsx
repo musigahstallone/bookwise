@@ -197,7 +197,7 @@ function SpecificOrderPageContent() {
                           Download PDF
                         </Button>
                         {downloadErrors[item.bookId] && (
-                          <p className="text-xs text-destructive mt-1.5 text-center sm:text-left">
+                          <p className="text-xs text-destructive mt-1.5 text-center sm:text-left break-words">
                             {downloadErrors[item.bookId]}
                           </p>
                         )}
