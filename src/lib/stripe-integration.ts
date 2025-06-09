@@ -1,13 +1,8 @@
+import StripeOriginal from "stripe";
 
-// Stripe Integration Logic
-// This module provides functions to create a payment intent and handle Stripe payments.
-
-import StripeOriginal from "stripe"; // Import original Stripe
-
-// Re-export Stripe types if needed elsewhere, or use StripeOriginal.PaymentIntent etc.
+// Use StripeOriginal for types and API usage
 export type Stripe = StripeOriginal;
 export type StripePaymentIntent = StripeOriginal.PaymentIntent;
-
 
 export interface StripeConfig {
   secretKey: string;
@@ -25,13 +20,13 @@ export interface CreatePaymentIntentParams {
 export interface PaymentIntentResult {
   clientSecret: string;
   paymentIntentId: string;
-  paymentIntent: Stripe.PaymentIntent; // Return the full PaymentIntent object
+  paymentIntent: StripeOriginal.PaymentIntent; // ✅ Use StripeOriginal here
 }
 
 // 1. Initialize Stripe client
-export function getStripeClient(config: StripeConfig): Stripe {
+export function getStripeClient(config: StripeConfig): StripeOriginal {
   return new StripeOriginal(config.secretKey, {
-    apiVersion: (config.apiVersion || "2024-06-20") as any, // Use latest or your preferred version
+    apiVersion: (config.apiVersion || "2024-06-20") as any,
   });
 }
 
@@ -46,7 +41,6 @@ export async function createStripePaymentIntent(
     currency: params.currency,
     metadata: params.metadata,
     receipt_email: params.receipt_email,
-    // You can add more options as needed, e.g., payment_method_types
   });
   if (!paymentIntent.client_secret) {
     throw new Error("Stripe PaymentIntent client_secret is missing.");
@@ -54,7 +48,7 @@ export async function createStripePaymentIntent(
   return {
     clientSecret: paymentIntent.client_secret,
     paymentIntentId: paymentIntent.id,
-    paymentIntent: paymentIntent, // Return the full object
+    paymentIntent: paymentIntent,
   };
 }
 
@@ -63,13 +57,11 @@ export function verifyStripeWebhookSignature(
   payload: Buffer | string,
   sigHeader: string,
   config: StripeConfig
-): Stripe.Event | null {
+): StripeOriginal.Event | null {
   if (!config.webhookSecret) {
-      console.warn("Stripe webhook secret is not configured. Signature verification skipped.");
-      // Depending on security policy, you might want to throw an error or handle differently
-      // For now, returning null to indicate verification couldn't be performed.
-      return null; 
-    }
+    console.warn("Stripe webhook secret is not configured. Signature verification skipped.");
+    return null;
+  }
   const stripe = getStripeClient(config);
   try {
     return stripe.webhooks.constructEvent(

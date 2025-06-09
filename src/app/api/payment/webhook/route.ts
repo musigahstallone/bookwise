@@ -18,7 +18,7 @@ interface MpesaCallbackPayload {
 
 
 export async function POST(request: Request) {
-  const headersList = headers(); 
+  const headersList = await headers(); 
   const paymentProvider = headersList.get("x-payment-provider") || headersList.get("X-Payment-Provider") || "unknown";
 
   const rawBodyForLogging = await request.clone().text();
