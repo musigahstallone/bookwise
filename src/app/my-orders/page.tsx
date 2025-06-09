@@ -71,10 +71,10 @@ export default function MyOrdersPage() {
   };
 
   const formatOrderPrice = (totalAmountUSD: number, orderRegionCode: string, orderCurrencyCode: string) => {
-    const regionForOrder = getRegionByCode(orderRegionCode) || defaultRegion;
-    const convertedPrice = totalAmountUSD * regionForOrder.conversionRateToUSD;
+    const resolvedRegion = getRegionByCode(orderRegionCode) || defaultRegion;
+    const convertedPrice = totalAmountUSD * resolvedRegion.conversionRateToUSD;
      let displayPrice;
-    if (regionForOrder.currencyCode === 'KES') {
+    if (resolvedRegion.currencyCode === 'KES') {
         if (Math.abs(convertedPrice - Math.round(convertedPrice)) < 0.005) {
              displayPrice = Math.round(convertedPrice).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         } else {
@@ -83,14 +83,14 @@ export default function MyOrdersPage() {
     } else {
          displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    return `${orderRegion.currencyCode} ${displayPrice}`;
+    return `${resolvedRegion.currencyCode} ${displayPrice}`;
   };
 
   const getStatusBadgeVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (status.toLowerCase()) {
-        case 'completed': return 'default'; // Primary/Success color from theme
-        case 'pending': return 'secondary'; // Neutral/Pending color
-        case 'failed': return 'destructive'; // Destructive/Error color
+        case 'completed': return 'default';
+        case 'pending': return 'secondary';
+        case 'failed': return 'destructive';
         default: return 'outline';
     }
   };
@@ -212,7 +212,7 @@ export default function MyOrdersPage() {
                         variant="outline"
                         className="w-full sm:w-auto mt-2 sm:mt-0"
                         onClick={() => onDownloadClick(item.bookId, item.title, item.pdfUrl)}
-                        disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
+                        disabled={!item.pdfUrl || pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
                       >
                         <Download className="mr-2 h-4 w-4" />
                         Download PDF
@@ -220,7 +220,7 @@ export default function MyOrdersPage() {
                     ) : (
                       <div className="text-sm text-muted-foreground w-full sm:w-auto text-center sm:text-right mt-2 sm:mt-0">
                         <Info className="inline h-4 w-4 mr-1" />
-                        Download available upon payment completion.
+                        {order.status === 'pending' ? 'Download available upon payment completion.' : 'Download not available.'}
                       </div>
                     )}
                   </div>
