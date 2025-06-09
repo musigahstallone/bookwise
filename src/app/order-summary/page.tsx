@@ -34,10 +34,10 @@ export default function OrderSummaryPage() {
     const regionCodeJson = sessionStorage.getItem('lastPurchasedRegionCode');
 
     if (regionCodeJson) {
-        const region = getRegionByCode(regionCodeJson);
-        if (region) {
-            setRegionForFormatting(region);
-        }
+      const region = getRegionByCode(regionCodeJson);
+      if (region) {
+        setRegionForFormatting(region);
+      }
     }
 
     if (itemsJson) {
@@ -50,7 +50,7 @@ export default function OrderSummaryPage() {
           }
           setPurchasedItems(validItems);
           if (validItems.length === 0 && items.length > 0) {
-             setError("Order data seems corrupted. Please check your 'My Orders' page for details.");
+            setError("Order data seems corrupted. Please check your 'My Orders' page for details.");
           }
         } else if (items.length === 0) {
           setError("No items were found for this order summary.");
@@ -74,13 +74,13 @@ export default function OrderSummaryPage() {
     const convertedPrice = usdPrice * regionForFormatting.conversionRateToUSD;
     let displayPrice;
     if (regionForFormatting.currencyCode === 'KES') {
-        if (Math.abs(convertedPrice - Math.round(convertedPrice)) < 0.005) {
-             displayPrice = Math.round(convertedPrice).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-        } else {
-            displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        }
+      if (Math.abs(convertedPrice - Math.round(convertedPrice)) < 0.005) {
+        displayPrice = Math.round(convertedPrice).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      } else {
+        displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
     } else {
-         displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      displayPrice = convertedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     return `${regionForFormatting.currencySymbol}${displayPrice}`;
   };
@@ -95,34 +95,34 @@ export default function OrderSummaryPage() {
       return;
     }
     if (!pdfUrl || pdfUrl.includes('placeholder-book.pdf') || pdfUrl.trim() === '') {
-        toast({
-            title: "Download Not Available",
-            description: `The PDF for "${bookTitle}" is currently not available. Please contact support.`,
-            variant: "destructive",
-        });
-        return;
+      toast({
+        title: "Download Not Available",
+        description: `The PDF for "${bookTitle}" is currently not available. Please contact support.`,
+        variant: "destructive",
+      });
+      return;
     }
     try {
-        const result = await handleRecordDownload(bookId, currentUser.uid);
-        if (result.success) {
-          toast({
-            title: "Download Logged",
-            description: `Preparing download for "${bookTitle}".`,
-          });
-          window.location.href = pdfUrl;
-        } else {
-          toast({
-            title: "Download Denied",
-            description: result.message, // Message from server action (e.g., rate limit)
-            variant: "destructive",
-          });
-        }
-    } catch (e: any) {
+      const result = await handleRecordDownload(bookId, currentUser.uid);
+      if (result.success) {
         toast({
-            title: "Download Logging Error",
-            description: e.message || "An unexpected error occurred while logging the download.",
-            variant: "destructive",
+          title: "Download Logged",
+          description: `Preparing download for "${bookTitle}".`,
         });
+        window.location.href = pdfUrl;
+      } else {
+        toast({
+          title: "Download Denied",
+          description: result.message, // Message from server action (e.g., rate limit)
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Download Logging Error",
+        description: e.message || "An unexpected error occurred while logging the download.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -147,7 +147,7 @@ export default function OrderSummaryPage() {
       </div>
     );
   }
-  
+
   if (purchasedItems.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center text-center py-20 min-h-[60vh]">
@@ -157,12 +157,12 @@ export default function OrderSummaryPage() {
           It looks like your previous order session has ended or no purchase was completed.
         </p>
         <div className="space-y-3 sm:space-y-0 sm:flex sm:justify-center sm:space-x-3">
-            <Button asChild size="lg">
+          <Button asChild size="lg">
             <Link href="/shop">Continue Shopping</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="mt-4 sm:mt-0">
+          </Button>
+          <Button asChild size="lg" variant="outline" className="mt-4 sm:mt-0">
             <Link href="/my-orders">View Your Past Orders</Link>
-            </Button>
+          </Button>
         </div>
       </div>
     );
@@ -177,15 +177,18 @@ export default function OrderSummaryPage() {
           <CheckCircle className="h-20 w-20 text-green-600 mx-auto mb-4" />
           <CardTitle className="text-3xl sm:text-4xl font-headline text-green-700">Thank You For Your Purchase!</CardTitle>
           <CardDescription className="text-md sm:text-lg text-muted-foreground mt-2">
-            Your order has been successfully processed. You can download your books below or find them anytime in <Link href="/my-orders" className="text-primary hover:underline font-semibold">My Orders</Link>.
+            Your order has been successfully processed. You can download your books below or find them anytime in
+            <Link href="/my-orders" className="text-primary hover:underline font-semibold">
+              My Orders
+            </Link>.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
-            <div className="text-center mb-6">
-                <p className="text-lg font-medium text-foreground">
-                    Total Amount: {formatPriceInOrderCurrency(totalAmountUSD)} ({purchasedItems.length} item{purchasedItems.length === 1 ? '' : 's'})
-                </p>
-            </div>
+          <div className="text-center mb-6">
+            <p className="text-lg font-medium text-foreground">
+              Total Amount: {formatPriceInOrderCurrency(totalAmountUSD)} ({purchasedItems.length} item{purchasedItems.length === 1 ? '' : 's'})
+            </p>
+          </div>
           {purchasedItems.map((item, index) => (
             <div key={item.id || index} className="flex flex-col sm:flex-row justify-between items-center gap-3 p-4 border rounded-lg bg-card/50 shadow-sm">
               <div className="flex-grow text-center sm:text-left">
@@ -198,8 +201,8 @@ export default function OrderSummaryPage() {
                 onClick={() => onDownloadClick(item.id, item.title, item.pdfUrl)}
                 disabled={!item.pdfUrl || item.pdfUrl.includes('placeholder-book.pdf') || item.pdfUrl.trim() === ''}
               >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download PDF
+                <Download className="mr-2 h-4 w-4" />
+                Download PDF
               </Button>
             </div>
           ))}

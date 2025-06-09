@@ -1,4 +1,3 @@
-
 # BookWise - Your Smart Online Bookstore (Firebase Integrated)
 
 BookWise is a modern, digital-first online bookstore built with Next.js, React, and Tailwind CSS. It leverages AI for book recommendations and aims to provide a seamless shopping experience for book lovers. This project integrates Firebase Firestore for book and user data management, and Firebase Storage for PDF file hosting. It includes a mock authentication system for admin role demonstration.
@@ -173,7 +172,3 @@ Once Firebase is configured and your app is running:
 ## 🤝 Contributing
 
 Contributions are welcome! Please follow the existing code style and ensure all tests pass. (Further contribution guidelines can be added here).
-
----
-
-This project was bootstrapped using Firebase Studio.

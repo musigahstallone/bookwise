@@ -12,7 +12,7 @@ import { createStripePaymentIntent } from "./stripe-integration";
 import { initiateStkPush } from "./mpesa-integration";
 
 export type PaymentMethod = "stripe" | "mpesa" | "mock";
-
+// after checkout I need the app to redirect to the success page with the bookId and paymentId
 export interface PaymentDetails {
   amount: number;
   currency: string;
@@ -168,7 +168,7 @@ async function handleMockPayment(
       amount: details.amount,
       currency: details.currency,
       paymentMethod: "mock",
-      status: "completed", // Auto-complete for mock payments
+      status: "completed",
       paymentId: mockPaymentId,
       createdAt: new Date(),
     });
