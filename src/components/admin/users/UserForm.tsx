@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation';
 import type { User } from '@/data/users';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, AlertTriangle } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState as ReactUseState } from 'react'; // aliasing to avoid conflict if any other local useState
 import { handleUpdateUser } from '@/lib/actions/userActions';
 
 const userFormSchema = z.object({
@@ -33,7 +33,7 @@ interface UserFormProps {
 export default function UserForm({ userToEdit, userId, firebaseConfigured }: UserFormProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = ReactUseState(false); // Using alias
 
   const isEditMode = !!userId && !!userToEdit;
 
@@ -180,8 +180,4 @@ export default function UserForm({ userToEdit, userId, firebaseConfigured }: Use
       </CardContent>
     </Card>
   );
-}
-
-function useState(arg0: boolean): [any, any] {
-  throw new Error('Function not implemented.');
 }
