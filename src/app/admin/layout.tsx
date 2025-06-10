@@ -75,7 +75,7 @@ export default function AdminLayout({
         <AdminSidebar /> {/* Desktop sidebar */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Mobile Header for Admin */}
-          <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 py-3 border-b bg-card">
+          <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-2 py-1 border-b bg-card rounded-[20px]">
             <Link href="/admin" className="flex items-center space-x-2 text-primary">
               <AdminLogoIcon className="h-7 w-7" />
               <h1 className="text-xl font-headline font-bold">Admin</h1>

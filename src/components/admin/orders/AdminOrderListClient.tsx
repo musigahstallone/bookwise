@@ -217,7 +217,8 @@ export default function AdminOrderListClient({ initialOrders }: AdminOrderListCl
               <p className="flex items-center"><CalendarDays className="mr-1.5 h-3.5 w-3.5"/> {format(order.orderDate, "dd/MM/yyyy h:mm a")}</p>
               <p className="flex items-center"><Package className="mr-1.5 h-3.5 w-3.5"/> {order.itemCount} item(s)</p>
               <p className="flex items-center font-medium text-foreground col-span-2 sm:col-span-1 sm:justify-end">
-                <DollarSign className="mr-1 h-3.5 w-3.5"/> {formatCurrency(order.totalAmountUSD, 'USD', 'US')}
+                {/* <DollarSign className="mr-1 h-3.5 w-3.5"/>  */}
+                {formatCurrency(order.totalAmountUSD, 'USD', 'US')}
               </p>
             </div>
              <div className="text-right mt-2">
