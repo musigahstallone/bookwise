@@ -39,6 +39,7 @@ export async function handleSeedDatabase() {
       console.error("Errors during seeding:", result.errors);
       return { success: false, message: `Seeding partially failed. Seeded ${result.count} books. Check server logs for errors.` };
     }
+    revalidatePath('/');
     revalidatePath('/admin');
     revalidatePath('/admin/books');
     revalidatePath('/shop');
@@ -65,8 +66,11 @@ export async function handleAddBook(bookData: Omit<Book, 'id'>) {
     // Check if a book with this ID already exists can be added here if necessary
 
     const newBook = await addBookToDb(newBookId, fullBookData);
+    revalidatePath('/');
     revalidatePath('/admin/books');
     revalidatePath('/shop');
+    // Consider revalidating the specific author page if performance allows
+    // revalidatePath(`/authors/${encodeURIComponent(newBook.author)}`);
     return { success: true, message: 'Book added successfully.', book: newBook };
   } catch (error) {
     console.error('Error adding book:', error);
@@ -85,10 +89,13 @@ export async function handleUpdateBook(id: string, bookData: Partial<Omit<Book, 
     if (!updatedBook) {
         return { success: false, message: 'Book not found for update.' };
     }
+    revalidatePath('/');
     revalidatePath('/admin/books');
     revalidatePath(`/admin/books/edit/${id}`);
     revalidatePath(`/books/${id}`);
     revalidatePath('/shop');
+    // Consider revalidating the specific author page if performance allows
+    // revalidatePath(`/authors/${encodeURIComponent(updatedBook.author)}`);
     return { success: true, message: 'Book updated successfully.', book: updatedBook };
   } catch (error) {
     console.error('Error updating book:', error);
@@ -118,11 +125,22 @@ export async function handleDeleteBook(id: string, pdfUrl?: string, coverImageUr
     if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
       return { success: false, message: "Firebase Project ID not configured." };
     }
+    
+    // To revalidate author page, we might need author before deleting
+    // const bookToDelete = await getBookByIdFromDb(id); // Requires getBookByIdFromDb to be available here
+
     await deleteFromStorage(pdfUrl, "PDF");
     await deleteFromStorage(coverImageUrl, "Cover Image");
     await deleteBookFromDb(id);
+
+    revalidatePath('/');
     revalidatePath('/admin/books');
     revalidatePath('/shop');
+    // if (bookToDelete) {
+    //   revalidatePath(`/authors/${encodeURIComponent(bookToDelete.author)}`);
+    // } else {
+    //   revalidatePath('/authors'); // Broader revalidation if author info not fetched
+    // }
     return { success: true, message: 'Book deleted successfully.' };
   } catch (error) {
     console.error('Error deleting book:', error);
