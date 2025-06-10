@@ -5,27 +5,69 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { type DownloadWithDetails } from '@/lib/tracking-service-firebase';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { BookCopy, Users, CalendarDays, ChevronRight, FileText } from 'lucide-react';
+import { BookCopy, Users, CalendarDays, ChevronRight, FileText, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import PaginationControls from '@/components/books/PaginationControls';
 import { Skeleton } from '@/components/ui/skeleton';
+import { db } from '@/lib/firebase';
+import { collection, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
+import { getBookByIdFromDb } from '@/lib/book-service-firebase';
+import { getUserDocumentFromDb } from '@/lib/user-service-firebase';
+
 
 const DOWNLOADS_PER_PAGE = 15;
 
 interface AdminDownloadListClientProps {
   initialDownloads: DownloadWithDetails[];
-  isLoadingInitial: boolean; // To show skeleton on first load
+  isLoadingInitial: boolean; 
 }
 
-export default function AdminDownloadListClient({ initialDownloads, isLoadingInitial }: AdminDownloadListClientProps) {
+export default function AdminDownloadListClient({ initialDownloads, isLoadingInitial: propIsLoadingInitial }: AdminDownloadListClientProps) {
   const [downloads, setDownloads] = useState<DownloadWithDetails[]>(initialDownloads);
+  const [isLoading, setIsLoading] = useState(propIsLoadingInitial);
   const [currentPage, setCurrentPage] = useState(1);
+  const [error, setError] = useState<string | null>(null);
 
-  // Update local state if initialDownloads prop changes (e.g., after a server refresh)
+
   useEffect(() => {
-    setDownloads(initialDownloads);
-    // Reset to page 1 if the data fundamentally changes, e.g. new search/filter in future
-  }, [initialDownloads]);
+    setIsLoading(true);
+    const q = query(collection(db, 'bookDownloads'), orderBy('downloadedAt', 'desc'));
+    
+    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+      try {
+        const fetchedDownloads: DownloadWithDetails[] = await Promise.all(
+          querySnapshot.docs.map(async (downloadDoc) => {
+            const downloadData = downloadDoc.data();
+            const user = await getUserDocumentFromDb(downloadData.userId);
+            const book = await getBookByIdFromDb(downloadData.bookId);
+            return {
+              id: downloadDoc.id,
+              userId: downloadData.userId,
+              userName: user?.name || 'Unknown User',
+              userEmail: user?.email || 'N/A',
+              bookId: downloadData.bookId,
+              bookTitle: book?.title || 'Unknown Book',
+              downloadedAt: (downloadData.downloadedAt as Timestamp)?.toDate() || new Date(0),
+            };
+          })
+        );
+        setDownloads(fetchedDownloads);
+        setError(null);
+      } catch (err: any) {
+          console.error("Error processing download snapshots:", err);
+          setError("Failed to process real-time download updates: " + err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    }, (err) => {
+      console.error("Error fetching downloads in real-time:", err);
+      setError("Failed to fetch downloads in real-time.");
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
 
   const totalPages = Math.ceil(downloads.length / DOWNLOADS_PER_PAGE);
 
@@ -41,7 +83,7 @@ export default function AdminDownloadListClient({ initialDownloads, isLoadingIni
   }, []);
 
 
-  if (isLoadingInitial && downloads.length === 0) {
+  if (isLoading && downloads.length === 0) {
     return (
       <div className="space-y-3 mt-6">
         {[...Array(5)].map((_, i) => (
@@ -55,7 +97,11 @@ export default function AdminDownloadListClient({ initialDownloads, isLoadingIni
     );
   }
   
-  if (downloads.length === 0 && !isLoadingInitial) {
+  if (error) {
+    return <div className="mt-6 p-4 bg-destructive/10 text-destructive border border-destructive/20 rounded-md">{error}</div>;
+  }
+  
+  if (downloads.length === 0 && !isLoading) {
     return <p className="mt-6 text-center text-muted-foreground">No download records found.</p>;
   }
 
@@ -67,16 +113,17 @@ export default function AdminDownloadListClient({ initialDownloads, isLoadingIni
             <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
               <div className="flex-grow">
                 <h3 className="font-semibold text-primary text-base sm:text-lg flex items-center">
-                  <FileText className="mr-2 h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+                  <FileText className="mr-2 h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-primary/80" />
                   {dl.bookTitle || 'Unknown Book'}
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5 sm:mt-0">
-                  Downloaded by: {dl.userName || 'N/A'} ({dl.userEmail || 'No Email'})
+                  <Users className="inline-block mr-1 h-3 w-3" /> 
+                  {dl.userName || 'N/A'} ({dl.userEmail || 'No Email'})
                 </p>
               </div>
               <div className="text-xs sm:text-sm text-muted-foreground mt-1 sm:mt-0 self-start sm:self-end">
                 <p className="flex items-center whitespace-nowrap">
-                  <CalendarDays className="mr-1.5 h-3.5 w-3.5"/> {format(dl.downloadedAt, "dd/MM/yyyy h:mm a")}
+                  <Download className="mr-1.5 h-3.5 w-3.5 text-green-600"/> {format(dl.downloadedAt, "dd/MM/yyyy h:mm a")}
                 </p>
               </div>
             </div>
@@ -109,4 +156,3 @@ export default function AdminDownloadListClient({ initialDownloads, isLoadingIni
     </>
   );
 }
-    

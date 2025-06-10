@@ -1,14 +1,14 @@
 
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { PlusCircle, AlertTriangle } from 'lucide-react';
-import BookDataTableClient from '@/components/admin/books/BookDataTableClient';
-import { getAllBooksFromDb } from '@/lib/book-service-firebase'; // Updated import
+import { PlusCircle, AlertTriangle, BookCopy } from 'lucide-react';
+import { getAllBooksFromDb } from '@/lib/book-service-firebase';
 import type { Book } from '@/data/books';
+import AdminBookListClient from '@/components/admin/books/AdminBookListClient';
 
 export default async function ManageBooksPage() {
   let books: Book[] = [];
-  let firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   let fetchError: string | null = null;
 
   if (firebaseConfigured) {
@@ -24,7 +24,9 @@ export default async function ManageBooksPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-            <h1 className="text-3xl font-headline font-bold text-primary">Manage Books</h1>
+            <h1 className="text-3xl font-headline font-bold text-primary flex items-center">
+              <BookCopy className="mr-3 h-8 w-8" /> Manage Books
+            </h1>
             <p className="text-muted-foreground">Add, edit, or delete books from the Firebase Firestore database.</p>
         </div>
         <Button asChild disabled={!firebaseConfigured}>
@@ -49,11 +51,11 @@ export default async function ManageBooksPage() {
         </div>
       )}
       
-      {firebaseConfigured && !fetchError && <BookDataTableClient initialBooks={books} />}
+      {firebaseConfigured && !fetchError && <AdminBookListClient initialBooks={books} />}
       
        <div className="mt-6 p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-md">
         <p className="font-bold">Developer Note:</p>
-        <p>Book data modifications made here now directly interact with Firebase Firestore. PDF files are stored in Firebase Storage.</p>
+        <p>Book data modifications now directly interact with Firebase Firestore. PDF and cover image files are stored in Firebase Storage.</p>
       </div>
     </div>
   );
