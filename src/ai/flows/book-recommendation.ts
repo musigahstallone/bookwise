@@ -39,13 +39,9 @@ const BookRecommendationOutputSchema = z.object({
 export type BookRecommendationOutput = z.infer<typeof BookRecommendationOutputSchema>;
 
 export async function getBookRecommendation(input: BookRecommendationInput): Promise<BookRecommendationOutput> {
-  const genkitKeyIsSet = !!process.env.GOOGLE_API_KEY;
-  if (!genkitKeyIsSet) {
-    console.warn("AI Recommender (Genkit/Google AI) is not configured due to missing API key. Returning empty recommendations.");
-    // Optionally, you could throw an error that the client can catch and display.
-    // throw new Error("AI Recommender is not configured. Please contact support.");
-    return { recommendedBooks: [] };
-  }
+  // Removed the explicit GOOGLE_API_KEY check here as per user request.
+  // The Genkit flow will be called directly. If the API key is not configured,
+  // the error will occur when Genkit attempts to make the API call.
   return bookRecommendationFlow(input);
 }
 
@@ -85,14 +81,8 @@ const bookRecommendationFlow = ai.defineFlow(
 // The AI agent uses a prompt that instructs it to recommend books based on the user's mood or preferences.
 // The flow is defined to process the input and return the recommended books along with reasons for the recommendations.
 // The AI agent is configured to use the Google AI model "gemini-2.0-flash" for generating recommendations.
-// If the Genkit configuration is not set up (e.g., missing API key), it logs a warning and returns an empty recommendation list.
+// The explicit check for GOOGLE_API_KEY has been removed from the exported function,
+// so the Genkit flow will be called directly. If the API key is not configured,
+// the error will occur when Genkit attempts to make the actual API call to Google AI.
 // The code is structured to be used in a server-side environment, as indicated by the 'use server' directive at the top.
-// The `isGenkitConfigured` flag is used to check if the Genkit AI is properly configured before making any AI calls, 
-// ensuring that the application can handle cases where the AI features are not available.
-// This setup allows for a flexible and type-safe way to integrate AI-driven book recommendations into the application.
 // The use of Zod schemas ensures that the input and output data structures are validated, providing type safety and reducing runtime errors.
-
-
-
-
-
