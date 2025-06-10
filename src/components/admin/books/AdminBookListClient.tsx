@@ -47,7 +47,7 @@ export default function AdminBookListClient({ initialBooks }: AdminBookListClien
 
   useEffect(() => {
     setIsLoading(true);
-    const q = query(collection(db, 'books'), orderBy('title', 'asc')); // Order by title or other field
+    const q = query(collection(db, 'books'), orderBy('title', 'asc'));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const fetchedBooks: Book[] = querySnapshot.docs.map(doc => {
         const data = doc.data();
@@ -74,7 +74,7 @@ export default function AdminBookListClient({ initialBooks }: AdminBookListClien
   };
 
   const handleDeleteRequest = (book: Book) => {
-    setSelectedBook(book); // Set for the dialog
+    setSelectedBook(book); 
     setShowDeleteDialog(true);
   };
 
@@ -87,8 +87,6 @@ export default function AdminBookListClient({ initialBooks }: AdminBookListClien
 
     if (result.success) {
       toast({ title: 'Success', description: result.message });
-      // Real-time listener will update the list, or can manually filter if not using real-time for books list
-      // setBooks(prevBooks => prevBooks.filter(b => b.id !== selectedBook.id));
       const newBooksCount = books.length - 1;
       const newTotalPages = Math.ceil(newBooksCount / BOOKS_PER_PAGE);
       if (currentPage > newTotalPages && newTotalPages > 0) {
@@ -101,7 +99,7 @@ export default function AdminBookListClient({ initialBooks }: AdminBookListClien
     }
     setIsDeleting(false);
     setShowDeleteDialog(false);
-    setIsDetailViewOpen(false); // Close details view after delete attempt
+    setIsDetailViewOpen(false); 
     setSelectedBook(null);
   };
 
@@ -119,40 +117,20 @@ export default function AdminBookListClient({ initialBooks }: AdminBookListClien
   }, []);
 
   if (isLoading && books.length === 0) {
-     return (
-      <div className="space-y-3 mt-6">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="p-4 border rounded-lg shadow-sm bg-card flex gap-4">
-            <Skeleton className="h-24 w-20 rounded" />
-            <div className="space-y-2 flex-1">
-                <Skeleton className="h-5 w-3/4" />
-                <Skeleton className="h-4 w-1/2" />
-                <Skeleton className="h-4 w-1/4" />
-            </div>
-          </div>
-        ))}
-      </div>
-    );
+     return ( <div className="space-y-3 mt-6">{[...Array(3)].map((_, i) => ( <div key={i} className="p-4 border rounded-lg shadow-sm bg-card flex gap-4"><Skeleton className="h-24 w-20 rounded" /><div className="space-y-2 flex-1"><Skeleton className="h-5 w-3/4" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-4 w-1/4" /></div></div>))}</div>);
   }
-
-  if (error) {
-    return <div className="mt-6 p-4 bg-destructive/10 text-destructive border border-destructive/20 rounded-md">{error}</div>;
-  }
-
-  if (books.length === 0 && !isLoading) {
-    return <p className="mt-6 text-center text-muted-foreground">No books found. <Link href="/admin/books/add" className="text-primary hover:underline">Add a new book</Link>.</p>;
-  }
+  if (error) return <div className="mt-6 p-4 bg-destructive/10 text-destructive border border-destructive/20 rounded-md">{error}</div>;
+  if (books.length === 0 && !isLoading) return <p className="mt-6 text-center text-muted-foreground">No books found. <Link href="/admin/books/add" className="text-primary hover:underline">Add a new book</Link>.</p>;
 
   const DetailViewContent = ({ book }: { book: Book }) => (
     <>
       <ScrollArea className="max-h-[70vh] sm:max-h-[80vh]">
         <div className="p-4 sm:p-6 space-y-4 text-sm">
-          <div className="relative w-full aspect-[2/3] max-w-xs mx-auto rounded-md overflow-hidden shadow-md mb-4">
+          <div className="relative w-32 h-48 sm:w-full sm:aspect-[2/3] sm:max-w-xs mx-auto rounded-md overflow-hidden shadow-md mb-4">
             <Image src={book.coverImageUrl || 'https://placehold.co/300x450.png'} alt={book.title} layout="fill" objectFit="cover" data-ai-hint={book.dataAiHint || 'book cover detail'}/>
           </div>
           <h4 className="font-semibold text-xl text-primary text-center">{book.title}</h4>
           <p className="text-muted-foreground text-center">by {book.author}</p>
-          
           <div className="border-t pt-3 mt-3 space-y-1">
             <p className="flex items-center"><Tag className="mr-2 h-4 w-4 text-muted-foreground"/><strong>Category:</strong> {book.category}</p>
             <p className="flex items-center"><DollarSign className="mr-2 h-4 w-4 text-muted-foreground"/><strong>Price:</strong> {formatCurrency(book.price, 'USD', 'US')}</p>
@@ -162,116 +140,22 @@ export default function AdminBookListClient({ initialBooks }: AdminBookListClien
             <h5 className="font-medium mb-1">Description:</h5>
             <p className="text-muted-foreground whitespace-pre-line text-xs leading-relaxed">{book.description}</p>
           </div>
-          {book.longDescription && (
-             <div className="border-t pt-3 mt-3">
-                <h5 className="font-medium mb-1">Long Description:</h5>
-                <p className="text-muted-foreground whitespace-pre-line text-xs leading-relaxed">{book.longDescription}</p>
-            </div>
-          )}
+          {book.longDescription && ( <div className="border-t pt-3 mt-3"><h5 className="font-medium mb-1">Long Description:</h5><p className="text-muted-foreground whitespace-pre-line text-xs leading-relaxed">{book.longDescription}</p></div>)}
         </div>
       </ScrollArea>
       <div className="p-4 sm:p-6 border-t flex flex-col sm:flex-row gap-2">
-        <Button asChild variant="outline" className="flex-1">
-          <Link href={`/admin/books/edit/${book.id}`}>
-            <Edit className="mr-2 h-4 w-4"/> Edit Book
-          </Link>
-        </Button>
-        <Button variant="destructive" onClick={() => handleDeleteRequest(book)} className="flex-1" disabled={isDeleting}>
-          {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4"/>}
-           Delete Book
-        </Button>
+        <Button asChild variant="outline" className="flex-1"><Link href={`/admin/books/edit/${book.id}`}><Edit className="mr-2 h-4 w-4"/> Edit Book</Link></Button>
+        <Button variant="destructive" onClick={() => handleDeleteRequest(book)} className="flex-1" disabled={isDeleting}>{isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4"/>} Delete Book</Button>
       </div>
     </>
   );
   
   return (
     <>
-      <div className="mt-6 space-y-3">
-        {paginatedBooks.map((book) => (
-          <div 
-            key={book.id} 
-            className="p-3 border rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-card flex gap-4 items-start"
-            onClick={() => handleBookClick(book)}
-          >
-            <div className="w-16 h-24 sm:w-20 sm:h-28 relative flex-shrink-0 rounded overflow-hidden shadow">
-              <Image src={book.coverImageUrl || 'https://placehold.co/80x120.png'} alt={book.title} layout="fill" objectFit="cover" data-ai-hint={book.dataAiHint || 'book cover small'}/>
-            </div>
-            <div className="flex-grow">
-              <h3 className="font-semibold text-primary text-base sm:text-md line-clamp-2">{book.title}</h3>
-              <p className="text-xs text-muted-foreground">by {book.author}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Category: {book.category}</p>
-              <p className="text-sm font-medium text-foreground mt-1">{formatCurrency(book.price, 'USD', 'US')}</p>
-            </div>
-            <div className="self-center ml-auto">
-                <ChevronRight className="h-5 w-5 text-muted-foreground"/>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {totalPages > 1 && (
-        <PaginationControls
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-        />
-      )}
-
-      {selectedBook && (
-        isMobileView ? (
-          <Drawer open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}>
-            <DrawerContent className="max-h-[85vh]">
-              <DrawerHeader className="text-left">
-                <DrawerTitle>Book Details</DrawerTitle>
-                <DrawerDescription className="line-clamp-1">{selectedBook.title}</DrawerDescription>
-              </DrawerHeader>
-              <DetailViewContent book={selectedBook} />
-              <DrawerFooter className="pt-2">
-                <DrawerClose asChild>
-                  <Button variant="outline">Close</Button>
-                </DrawerClose>
-              </DrawerFooter>
-            </DrawerContent>
-          </Drawer>
-        ) : (
-          <Sheet open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}>
-            <SheetContent className="sm:max-w-md w-full flex flex-col">
-              <SheetHeader>
-                <SheetTitle>Book Details</SheetTitle>
-                <SheetDescription className="line-clamp-1">{selectedBook.title}</SheetDescription>
-              </SheetHeader>
-              <div className="flex-grow overflow-hidden">
-                 <DetailViewContent book={selectedBook} />
-              </div>
-               <SheetFooter className="pt-2 mt-auto">
-                 <SheetClose asChild>
-                   <Button variant="outline">Close</Button>
-                 </SheetClose>
-               </SheetFooter>
-            </SheetContent>
-          </Sheet>
-        )
-      )}
-      {selectedBook && (
-        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-            <AlertDialogContent>
-            <AlertDialogHeader>
-                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                <AlertDialogDescription>
-                This action will permanently delete the book "{selectedBook.title}" 
-                and its associated files (PDF, Cover Image) from Firebase Storage. This cannot be undone.
-                </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>
-                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Delete
-                </AlertDialogAction>
-            </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-      )}
+      <div className="mt-6 space-y-3">{paginatedBooks.map((book) => (<div key={book.id} className="p-3 border rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-card flex gap-4 items-start" onClick={() => handleBookClick(book)}><div className="w-16 h-24 sm:w-20 sm:h-28 relative flex-shrink-0 rounded overflow-hidden shadow"><Image src={book.coverImageUrl || 'https://placehold.co/80x120.png'} alt={book.title} layout="fill" objectFit="cover" data-ai-hint={book.dataAiHint || 'book cover small'}/></div><div className="flex-grow"><h3 className="font-semibold text-primary text-base sm:text-md line-clamp-2">{book.title}</h3><p className="text-xs text-muted-foreground">by {book.author}</p><p className="text-xs text-muted-foreground mt-0.5">Category: {book.category}</p><p className="text-sm font-medium text-foreground mt-1">{formatCurrency(book.price, 'USD', 'US')}</p></div><div className="self-center ml-auto"><ChevronRight className="h-5 w-5 text-muted-foreground"/></div></div>))}</div>
+      {totalPages > 1 && (<PaginationControls currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange}/>)}
+      {selectedBook && ( isMobileView ? ( <Drawer open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}><DrawerContent className="max-h-[85vh]"><DrawerHeader className="text-left"><DrawerTitle>Book Details</DrawerTitle><DrawerDescription className="line-clamp-1">{selectedBook.title}</DrawerDescription></DrawerHeader><DetailViewContent book={selectedBook} /><DrawerFooter className="pt-2"><DrawerClose asChild><Button variant="outline">Close</Button></DrawerClose></DrawerFooter></DrawerContent></Drawer>) : ( <Sheet open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}><SheetContent className="sm:max-w-md w-full flex flex-col"><SheetHeader><SheetTitle>Book Details</SheetTitle><SheetDescription className="line-clamp-1">{selectedBook.title}</SheetDescription></SheetHeader><div className="flex-grow overflow-hidden"><DetailViewContent book={selectedBook} /></div><SheetFooter className="pt-2 mt-auto"><SheetClose asChild><Button variant="outline">Close</Button></SheetClose></SheetFooter></SheetContent></Sheet>) )}
+      {selectedBook && (<AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete the book "{selectedBook.title}" and its associated files (PDF, Cover Image) from Firebase Storage. This cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>{isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}
     </>
   );
 }

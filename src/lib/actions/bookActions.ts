@@ -4,21 +4,37 @@
 import { revalidatePath } from 'next/cache';
 import { books as mockBooks, type Book } from '@/data/books';
 import { 
-  seedBooksToFirestore as seedBooksToDb, 
   addBookToDb, 
   updateBookInDb, 
-  deleteBookFromDb 
+  deleteBookFromDb,
+  seedBooksToFirestore as seedBooksToDb, // Renamed for clarity
 } from '@/lib/book-service-firebase';
 import { storage } from '@/lib/firebase';
 import { ref as storageRef, deleteObject } from 'firebase/storage';
 
-// Server Action to seed the database
+// Helper to sanitize title for Firestore document ID
+function sanitizeTitleForId(title: string): string {
+  if (!title) return `book-${Date.now()}`; // Fallback if title is empty
+  const sanitized = title
+    .toLowerCase()
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/[^\w-]+/g, '') // Remove non-alphanumeric characters except hyphens
+    .substring(0, 100); // Limit length
+
+  // Ensure it's not empty after sanitization and doesn't start/end with hyphen
+  let finalId = sanitized.replace(/^-+|-+$/g, '');
+  if (!finalId) return `book-${Date.now()}`;
+  return finalId;
+}
+
+
 export async function handleSeedDatabase() {
   try {
     if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
       return { success: false, message: "Firebase Project ID not configured." };
     }
-    const result = await seedBooksToDb(mockBooks);
+    // Pass mockBooks with their existing IDs for seeding
+    const result = await seedBooksToDb(mockBooks); 
     if (result.errors.length > 0) {
       console.error("Errors during seeding:", result.errors);
       return { success: false, message: `Seeding partially failed. Seeded ${result.count} books. Check server logs for errors.` };
@@ -26,7 +42,6 @@ export async function handleSeedDatabase() {
     revalidatePath('/admin');
     revalidatePath('/admin/books');
     revalidatePath('/shop');
-    // Revalidate other paths that display book data if necessary
     return { success: true, message: `Successfully seeded ${result.count} books to Firestore.` };
   } catch (error) {
     console.error('Error seeding database:', error);
@@ -35,30 +50,32 @@ export async function handleSeedDatabase() {
   }
 }
 
-// Server Action to add a book
 export async function handleAddBook(bookData: Omit<Book, 'id'>) {
   try {
     if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
       return { success: false, message: "Firebase Project ID not configured." };
     }
-    // Ensure essential URLs have defaults if not provided by client (though client should handle this)
     const fullBookData = {
         ...bookData,
         pdfUrl: bookData.pdfUrl || '/pdfs/placeholder-book.pdf',
         coverImageUrl: bookData.coverImageUrl || 'https://placehold.co/300x300.png',
     };
-    const newBook = await addBookToDb(fullBookData);
+
+    const newBookId = sanitizeTitleForId(fullBookData.title);
+    // Check if a book with this ID already exists can be added here if necessary
+
+    const newBook = await addBookToDb(newBookId, fullBookData);
     revalidatePath('/admin/books');
     revalidatePath('/shop');
     return { success: true, message: 'Book added successfully.', book: newBook };
   } catch (error) {
     console.error('Error adding book:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+    // Consider checking for specific Firestore errors, e.g., if setDoc fails due to permissions or existing doc rules.
     return { success: false, message: `Failed to add book: ${errorMessage}` };
   }
 }
 
-// Server Action to update a book
 export async function handleUpdateBook(id: string, bookData: Partial<Omit<Book, 'id'>>) {
   try {
     if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
@@ -80,7 +97,6 @@ export async function handleUpdateBook(id: string, bookData: Partial<Omit<Book, 
   }
 }
 
-// Helper function to safely delete from Firebase Storage
 async function deleteFromStorage(fileUrl?: string, type?: string) {
   if (fileUrl && fileUrl.includes('firebasestorage.googleapis.com')) {
     try {
@@ -88,8 +104,6 @@ async function deleteFromStorage(fileUrl?: string, type?: string) {
       await deleteObject(fileRef);
       console.log(`Successfully deleted ${type || 'file'} from Storage: ${fileUrl}`);
     } catch (storageError: any) {
-      // Log storage error but continue
-      // ENOENT means file not found, which is fine if it was already deleted or never existed.
       if (storageError.code !== 'storage/object-not-found') {
          console.error(`Failed to delete ${type || 'file'} from Storage (${fileUrl}):`, storageError);
       } else {
@@ -99,20 +113,16 @@ async function deleteFromStorage(fileUrl?: string, type?: string) {
   }
 }
 
-// Server Action to delete a book
 export async function handleDeleteBook(id: string, pdfUrl?: string, coverImageUrl?: string) {
   try {
     if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
       return { success: false, message: "Firebase Project ID not configured." };
     }
-
     await deleteFromStorage(pdfUrl, "PDF");
     await deleteFromStorage(coverImageUrl, "Cover Image");
-    
     await deleteBookFromDb(id);
     revalidatePath('/admin/books');
     revalidatePath('/shop');
-    // Consider revalidating author pages or book detail pages if they might be cached
     return { success: true, message: 'Book deleted successfully.' };
   } catch (error) {
     console.error('Error deleting book:', error);

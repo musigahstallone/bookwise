@@ -7,7 +7,7 @@ import {
   getDocs,
   doc,
   getDoc,
-  addDoc,
+  setDoc, // Changed from addDoc
   updateDoc,
   deleteDoc,
   query,
@@ -17,10 +17,6 @@ import {
 } from 'firebase/firestore';
 
 const BOOKS_COLLECTION = 'books';
-
-// Helper to convert Firestore Timestamps to serializable format (e.g., ISO string or Date object)
-// For now, we'll assume publishedYear is just a number, so direct mapping works.
-// If Book interface had Date objects, we'd need to convert Timestamps from Firestore.
 
 export const getAllBooksFromDb = async (): Promise<Book[]> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
@@ -36,7 +32,7 @@ export const getAllBooksFromDb = async (): Promise<Book[]> => {
     return booksList;
   } catch (error) {
     console.error("Error fetching books from Firestore:", error);
-    return []; // Return empty array or throw error as per app's error handling strategy
+    return [];
   }
 };
 
@@ -73,16 +69,14 @@ export const getBooksByAuthorFromDb = async (authorName: string): Promise<Book[]
   }
 };
 
-
-// Note: Add, Update, Delete functions are typically called via Server Actions for security and server-side logic.
-// The actual Firestore write operations are defined here.
-
-export const addBookToDb = async (bookData: Omit<Book, 'id'>): Promise<Book> => {
+// Use setDoc with a specific ID (generated from title by server action)
+export const addBookToDb = async (id: string, bookData: Omit<Book, 'id'>): Promise<Book> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
     throw new Error("Firebase Project ID not configured.");
   }
-  const docRef = await addDoc(collection(db, BOOKS_COLLECTION), bookData);
-  return { id: docRef.id, ...bookData };
+  const bookDocRef = doc(db, BOOKS_COLLECTION, id);
+  await setDoc(bookDocRef, bookData);
+  return { id, ...bookData };
 };
 
 export const updateBookInDb = async (id: string, updates: Partial<Omit<Book, 'id'>>): Promise<Book | null> => {
@@ -91,7 +85,6 @@ export const updateBookInDb = async (id: string, updates: Partial<Omit<Book, 'id
   }
   const bookDocRef = doc(db, BOOKS_COLLECTION, id);
   await updateDoc(bookDocRef, updates);
-  // Fetch the updated document to return it
   const updatedDoc = await getDoc(bookDocRef);
   if (updatedDoc.exists()) {
     return { id: updatedDoc.id, ...updatedDoc.data() } as Book;
@@ -105,9 +98,9 @@ export const deleteBookFromDb = async (id: string): Promise<void> => {
   }
   const bookDocRef = doc(db, BOOKS_COLLECTION, id);
   await deleteDoc(bookDocRef);
-  // Consider deleting associated PDF from Firebase Storage here if needed
 };
 
+// For seeding, we use the IDs from the mock data.
 export const seedBooksToFirestore = async (booksToSeed: Book[]): Promise<{count: number, errors: any[]}> => {
   if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
     throw new Error("Firebase Project ID not configured for seeding.");
@@ -118,14 +111,9 @@ export const seedBooksToFirestore = async (booksToSeed: Book[]): Promise<{count:
 
   for (const book of booksToSeed) {
     try {
-      // Use the book's existing ID from mock data as the document ID in Firestore
-      // This makes seeding idempotent if run multiple times with same mock data.
-      const docRef = doc(db, BOOKS_COLLECTION, book.id);
-      // Firestore Timestamps are preferred for date fields if you plan to query by date ranges,
-      // but for publishedYear as a number, direct set is fine.
-      // If you had a `createdAt` or `updatedAt` field, you'd use `serverTimestamp()`
-      const { id, ...bookData } = book; // Exclude id from the data being set if using it as doc ID
-      batch.set(docRef, bookData);
+      const docRef = doc(db, BOOKS_COLLECTION, book.id); // Use predefined ID from mock data
+      const { id, ...bookDataToSeed } = book;
+      batch.set(docRef, bookDataToSeed);
       count++;
     } catch (error) {
       console.error(`Error preparing book "${book.title}" for batch seed:`, error);
@@ -140,7 +128,7 @@ export const seedBooksToFirestore = async (booksToSeed: Book[]): Promise<{count:
   } catch (error) {
     console.error("Error committing seed batch to Firestore:", error);
     errors.push({ general: "Batch commit failed", error });
-    return { count: 0, errors }; // Or rethrow / handle differently
+    return { count: 0, errors };
   }
 };
 
