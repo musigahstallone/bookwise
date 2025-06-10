@@ -23,27 +23,26 @@ import type Stripe from "stripe";
 export type PaymentMethod = "stripe" | "mpesa" | "mock";
 
 export interface PaymentDetails {
-  amount: number; // For M-Pesa, this should be in KES. For Stripe, in smallest currency unit (e.g., cents).
+  amount: number; 
   currency: string;
   userId: string;
   items: OrderItemInput[];
   email?: string;
-  phoneNumber?: string; // Normalized to 254xxxxxxxxx for M-Pesa
+  phoneNumber?: string;
   regionCode: string;
   itemCount: number;
-  actualAmountInSelectedCurrency: number; // The amount in the currency the user sees (e.g., KES 1300, USD 10)
+  actualAmountInSelectedCurrency: number;
 }
 
-export interface PaymentApiResponse { // Renamed from PaymentResponse
+export interface PaymentApiResponse {
   success: boolean;
   error?: string;
-  orderId?: string; // ID of the pending order created
-  paymentGatewayId?: string; // Stripe PaymentIntent ID or M-Pesa CheckoutRequestID
-  clientSecret?: string; // For Stripe
+  orderId?: string; 
+  paymentGatewayId?: string;
+  clientSecret?: string; 
   message?: string;
 }
 
-// M-Pesa Specific Response Structures for Storing
 export interface MpesaInitialApiResponse {
   MerchantRequestID: string;
   CheckoutRequestID: string;
@@ -68,10 +67,10 @@ export interface MpesaStkCallback {
 
 export interface TransactionRecord {
   userId: string;
-  orderId: string; // Link to the 'orders' document
+  orderId: string; 
   paymentMethod: PaymentMethod;
-  paymentGatewayId: string; // M-Pesa CheckoutRequestID or Stripe PaymentIntentID
-  status: OrderStatus; // "pending", "completed", "failed"
+  paymentGatewayId: string; 
+  status: OrderStatus; 
   customerMessage?: string;
   mpesaInitialResponse?: MpesaInitialApiResponse;
   mpesaCallbackResponse?: MpesaStkCallback;
@@ -83,7 +82,6 @@ export interface TransactionRecord {
 
 const TRANSACTIONS_COLLECTION = "transactions";
 
-// Record a transaction in Firestore
 async function recordTransaction(
   transactionInput: Omit<TransactionRecord, 'createdAt' | 'updatedAt'>
 ): Promise<string> {
@@ -102,8 +100,7 @@ async function recordTransaction(
   }
 }
 
-// Creates a PENDING order, then initiates payment and records transaction
-async function createPendingOrderAndInitiatePayment(
+async function createInitialOrderAndInitiatePayment(
   details: PaymentDetails,
   paymentMethod: PaymentMethod,
   initiationFn: (details: PaymentDetails, orderId: string) => Promise<PaymentApiResponse>
@@ -112,54 +109,69 @@ async function createPendingOrderAndInitiatePayment(
     return { success: false, error: "Firebase Project ID not configured." };
   }
 
-  // 1. Create a pending order first
+  // Determine initial status based on payment method
+  const initialOrderStatus: OrderStatus = paymentMethod === 'mock' ? 'completed' : 'pending';
+
   const orderPayload: CreateOrderData = {
     userId: details.userId,
+    userEmail: details.email,
     items: details.items,
-    totalAmountUSD: details.currency.toUpperCase() === 'USD' ? details.actualAmountInSelectedCurrency : details.actualAmountInSelectedCurrency / (parseFloat(process.env.KES_TO_USD_RATE || "130")), // Calculate USD equivalent
+    totalAmountUSD: details.currency.toUpperCase() === 'USD' ? details.actualAmountInSelectedCurrency : details.actualAmountInSelectedCurrency / (parseFloat(process.env.KES_TO_USD_RATE || "130")),
     regionCode: details.regionCode,
-    currencyCode: details.currency, // The currency user pays in
-    actualAmountPaid: details.actualAmountInSelectedCurrency, // Actual amount in display/payment currency
+    currencyCode: details.currency,
+    actualAmountPaid: paymentMethod === 'mock' ? details.actualAmountInSelectedCurrency : 0, // For mock, amount is "paid"
     itemCount: details.itemCount,
-    status: "pending",
+    status: initialOrderStatus,
     paymentMethod: paymentMethod,
+    paymentGatewayId: paymentMethod === 'mock' ? `mock_${Date.now()}` : null, // For mock, generate a mock PG ID
   };
 
   const orderResult = await handleCreateOrder(orderPayload);
   if (!orderResult.success || !orderResult.orderId) {
-    return { success: false, error: `Failed to create pending order: ${orderResult.message || "Unknown error"}` };
+    return { success: false, error: `Failed to create initial order: ${orderResult.message || "Unknown error"}` };
   }
-  const pendingOrderId = orderResult.orderId;
+  const initialOrderId = orderResult.orderId;
 
-  // 2. Now initiate the payment with the specific provider, passing the pendingOrderId
+  // For mock payments, we might have already set it to completed. Transaction also done in handleMockPayment.
+  if (paymentMethod === 'mock') {
+    return { 
+        success: true, 
+        orderId: initialOrderId, 
+        paymentGatewayId: orderPayload.paymentGatewayId!, // It's set for mock
+        message: "Mock payment processed successfully." 
+    };
+  }
+
+  // For Stripe and M-Pesa, now initiate the actual payment provider interaction
   try {
-    const paymentInitiationResponse = await initiationFn(details, pendingOrderId);
+    const paymentInitiationResponse = await initiationFn(details, initialOrderId);
     
     if (!paymentInitiationResponse.success) {
-      // Payment initiation failed, mark order as failed
-      await updateOrderStatus(pendingOrderId, "failed", { paymentMethod });
-      return { ...paymentInitiationResponse, orderId: pendingOrderId }; // Return error from payment initiation
+      await updateOrderStatus(initialOrderId, "failed", { paymentMethod });
+      return { ...paymentInitiationResponse, orderId: initialOrderId };
     }
     
-    // Payment initiation successful, transaction was recorded by initiationFn with orderId
-    // The order is already pending, so just return the success response.
-    // The paymentGatewayId should be set on the order by the webhook or finalization step.
-    await updateOrderStatus(pendingOrderId, "pending", { paymentGatewayId: paymentInitiationResponse.paymentGatewayId, paymentMethod});
+    // Update order with paymentGatewayId if available from initiation
+    if (paymentInitiationResponse.paymentGatewayId) {
+        await updateOrderStatus(initialOrderId, "pending", { 
+            paymentGatewayId: paymentInitiationResponse.paymentGatewayId, 
+            paymentMethod 
+        });
+    }
 
-    return { ...paymentInitiationResponse, orderId: pendingOrderId };
+    return { ...paymentInitiationResponse, orderId: initialOrderId };
 
   } catch (initiationError: any) {
-    console.error(`Error during payment initiation for order ${pendingOrderId} with ${paymentMethod}:`, initiationError);
-    await updateOrderStatus(pendingOrderId, "failed", { paymentMethod }); // Mark order as failed
-    return { success: false, error: initiationError.message || "Payment initiation failed after order creation.", orderId: pendingOrderId };
+    console.error(`Error during payment initiation for order ${initialOrderId} with ${paymentMethod}:`, initiationError);
+    await updateOrderStatus(initialOrderId, "failed", { paymentMethod });
+    return { success: false, error: initiationError.message || "Payment initiation failed after order creation.", orderId: initialOrderId };
   }
 }
 
 
-// Handle Stripe Payment
 async function handleStripePayment(
   details: PaymentDetails,
-  orderId: string // ID of the PENDING order
+  orderId: string 
 ): Promise<PaymentApiResponse> {
   try {
     if (!process.env.STRIPE_SECRET_KEY || !process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
@@ -172,7 +184,7 @@ async function handleStripePayment(
         webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
       },
       {
-        amount: details.amount, // Expected in cents
+        amount: details.amount,
         currency: details.currency.toLowerCase(),
         metadata: { userId: details.userId, orderId: orderId, itemsCount: details.items.length.toString() },
         receipt_email: details.email,
@@ -183,9 +195,9 @@ async function handleStripePayment(
       userId: details.userId,
       orderId: orderId,
       paymentMethod: "stripe",
-      status: "pending", // Payment intent created, waiting for user action / webhook
+      status: "pending", 
       paymentGatewayId: stripeResponse.paymentIntentId,
-      customerMessage: "Stripe payment initiated. Waiting for confirmation.",
+      customerMessage: "Stripe payment initiated. Waiting for user action or webhook.",
       stripePaymentIntentResponse: { clientSecret: stripeResponse.clientSecret, paymentIntentId: stripeResponse.paymentIntentId},
     });
 
@@ -203,10 +215,9 @@ async function handleStripePayment(
 }
 
 
-// Handle M-Pesa Payment
 async function handleMpesaPayment(
   details: PaymentDetails,
-  orderId: string // ID of the PENDING order
+  orderId: string 
 ): Promise<PaymentApiResponse> {
   const mpesaEnv = process.env.MPESA_ENVIRONMENT as MpesaConfig['environment'] || "sandbox";
   try {
@@ -216,15 +227,14 @@ async function handleMpesaPayment(
     if (!details.phoneNumber) throw new Error("Phone number is required for M-Pesa.");
     if (details.currency.toUpperCase() !== 'KES') throw new Error("M-Pesa payments must be in KES.");
 
-    let accountRef = orderId.substring(0,12); // Use orderId as account reference
+    let accountRef = orderId.substring(0,12); 
     let transactionDesc = `Order ${orderId.substring(0,8)}`;
     if (transactionDesc.length > 100) transactionDesc = transactionDesc.substring(0, 100);
 
-    const mpesaApiAmount = mpesaEnv === 'sandbox' ? 1 : Math.round(details.amount); // details.amount is KES here
+    const mpesaApiAmount = mpesaEnv === 'sandbox' ? 1 : Math.round(details.amount);
      if (mpesaEnv === 'sandbox' && Math.round(details.amount) !== 1) {
         console.warn(`M-Pesa Sandbox: Original order amount KES ${details.amount} overridden to ${mpesaApiAmount} for API call for order ${orderId}.`);
     }
-
 
     const mpesaResponse: StkPushResponse = await initiateStkPush(
       {
@@ -272,7 +282,7 @@ async function handleMpesaPayment(
     return {
       success: true,
       paymentGatewayId: mpesaResponse.CheckoutRequestID,
-      message: mpesaResponse.CustomerMessage || "STK Push initiated.",
+      message: mpesaResponse.CustomerMessage || "STK Push initiated. Waiting for confirmation.",
       orderId: orderId,
     };
 
@@ -290,25 +300,25 @@ async function handleMpesaPayment(
   }
 }
 
-// Handle Mock Payment
 async function handleMockPayment(
   details: PaymentDetails,
-  orderId: string // ID of the PENDING order
+  orderId: string 
 ): Promise<PaymentApiResponse> {
   try {
     const mockPaymentGatewayId = `mock_${orderId}`;
     
+    // Transaction is recorded with completed status
     await recordTransaction({
       userId: details.userId,
       orderId: orderId,
       paymentMethod: "mock",
-      status: "completed", // Mock payment is instantly completed
+      status: "completed",
       paymentGatewayId: mockPaymentGatewayId,
       customerMessage: "Mock payment successful.",
     });
 
-    // Since order was already created as pending, now update its status
-    await updateOrderStatus(orderId, "completed", { paymentGatewayId: mockPaymentGatewayId, paymentMethod: "mock" });
+    // Order status is already "completed" as set by createInitialOrderAndInitiatePayment
+    // So, no need to call updateOrderStatus here explicitly for "mock" if initial status was already "completed"
 
     return {
       success: true,
@@ -324,11 +334,10 @@ async function handleMockPayment(
 }
 
 
-// Main payment processing function called by API route
 export async function processPayment(
   method: PaymentMethod,
   details: PaymentDetails
-): Promise<PaymentApiResponse> { // Changed return type
+): Promise<PaymentApiResponse> {
   const initiationFunction = (currentDetails: PaymentDetails, currentOrderId: string) => {
     switch (method) {
       case "stripe":
@@ -336,18 +345,19 @@ export async function processPayment(
       case "mpesa":
         return handleMpesaPayment(currentDetails, currentOrderId);
       case "mock":
+        // For mock, the order is created as 'completed' directly by createInitialOrderAndInitiatePayment
+        // So handleMockPayment just needs to record the transaction.
         return handleMockPayment(currentDetails, currentOrderId);
       default:
         throw new Error("Invalid payment method selected for initiation.");
     }
   };
-  return createPendingOrderAndInitiatePayment(details, method, initiationFunction);
+  return createInitialOrderAndInitiatePayment(details, method, initiationFunction);
 }
 
 
-// Called by M-Pesa Webhook
 export async function updateTransactionAndCreateOrderIfNeeded(
-  paymentGatewayId: string, // M-Pesa CheckoutRequestID
+  paymentGatewayId: string, 
   mpesaFullCallbackData: MpesaStkCallback
 ): Promise<void> {
   try {
@@ -384,10 +394,18 @@ export async function updateTransactionAndCreateOrderIfNeeded(
     await updateDoc(transactionDocRef, dataToUpdate);
     console.log(`M-Pesa Transaction ${transactionDocRef.id} (PGID: ${paymentGatewayId}) status updated to ${callbackStatus}.`);
 
-    // Now update the linked order's status
     if (transactionData.orderId) {
         await updateOrderStatus(transactionData.orderId, callbackStatus, { paymentGatewayId, paymentMethod: "mpesa" });
         console.log(`Order ${transactionData.orderId} status updated to ${callbackStatus} based on M-Pesa callback for PGID ${paymentGatewayId}.`);
+        
+        // Placeholder for email on completion by webhook
+        // if (callbackStatus === 'completed' && transactionData.userId) {
+        //   const orderSnap = await getDoc(doc(db, 'orders', transactionData.orderId));
+        //   if(orderSnap.exists()) {
+        //      const order = orderSnap.data();
+        //      // if (order.userEmail) { console.log(`TODO: Send webhook completion email to ${order.userEmail}`); }
+        //   }
+        // }
     } else {
         console.error(`M-Pesa callback for PGID ${paymentGatewayId} processed, but transaction ${transactionDocRef.id} has no orderId.`);
     }
@@ -398,7 +416,6 @@ export async function updateTransactionAndCreateOrderIfNeeded(
 }
 
 
-// Called by Stripe Webhook
 export async function finalizeStripeTransactionAndCreateOrder(paymentIntentId: string, paymentIntent: Stripe.PaymentIntent) {
     try {
         const transactionQuery = query(
@@ -438,10 +455,18 @@ export async function finalizeStripeTransactionAndCreateOrder(paymentIntentId: s
         await updateDoc(transactionDocRef, dataToUpdate);
         console.log(`Stripe transaction ${paymentIntentId} status updated to ${newStatus} via webhook.`);
 
-        // Now update the linked order's status
         if (transactionData.orderId) {
             await updateOrderStatus(transactionData.orderId, newStatus, { paymentGatewayId: paymentIntentId, paymentMethod: "stripe" });
             console.log(`Order ${transactionData.orderId} status updated to ${newStatus} based on Stripe webhook for PI ${paymentIntentId}.`);
+
+            // Placeholder for email on completion by webhook
+            // if (newStatus === 'completed' && transactionData.userId) {
+            //   const orderSnap = await getDoc(doc(db, 'orders', transactionData.orderId));
+            //   if(orderSnap.exists()) {
+            //      const order = orderSnap.data();
+            //      // if (order.userEmail) { console.log(`TODO: Send webhook completion email to ${order.userEmail}`); }
+            //   }
+            // }
         } else {
              console.error(`Stripe webhook for PI ${paymentIntentId} processed, but transaction ${transactionDocRef.id} has no orderId.`);
         }
@@ -458,6 +483,4 @@ export function getMpesaCallbackItemValue(itemName: string, callbackMetadata?: {
     const item = callbackMetadata.Item.find(i => i.Name === itemName);
     return item?.Value;
 }
-
-
     

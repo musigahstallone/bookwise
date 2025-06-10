@@ -13,15 +13,17 @@ import {
   getDocs,
   query,
   where,
-  writeBatch, // Added for batch updates
+  writeBatch,
+  limit,
+  getDoc,
 } from 'firebase/firestore';
 import type { PaymentMethod } from '@/lib/payment-service';
-import { getRegionByCode, defaultRegion } from '@/data/regionData'; // Added for region lookup
+import { getRegionByCode, defaultRegion } from '@/data/regionData';
 
 export interface OrderItemInput {
   bookId: string;
   title: string;
-  price: number; // This is the USD price from the book catalog for consistency in item data
+  price: number;
   coverImageUrl: string;
   pdfUrl: string;
   dataAiHint?: string;
@@ -41,7 +43,7 @@ export interface CreateOrderData {
     status: OrderStatus;
     paymentGatewayId?: string | null;
     paymentMethod?: PaymentMethod | null;
-    orderId?: string; // Optional: if order is pre-created and just needs details filled
+    orderId?: string;
 }
 
 
@@ -75,18 +77,18 @@ export async function handleCreateOrder(
       regionCode: orderData.regionCode || defaultRegion.code,
       currencyCode: orderData.currencyCode || defaultRegion.currencyCode,
       itemCount: typeof orderData.itemCount === 'number' ? orderData.itemCount : 0,
-      status: orderData.status || 'failed',
+      status: orderData.status, // Status is now passed in, typically 'pending' or 'completed' for mock
       paymentGatewayId: orderData.paymentGatewayId || null,
       paymentMethod: orderData.paymentMethod || null,
       lastUpdatedAt: serverTimestamp(),
     };
     
     let orderRef;
-    if (orderData.orderId) { // If an orderId is provided, update that order
+    if (orderData.orderId) {
         orderRef = doc(db, 'orders', orderData.orderId);
         await updateDoc(orderRef, orderDocData);
         console.log(`Order ${orderData.orderId} details updated with status: ${orderData.status}`);
-    } else { // Otherwise, create a new order
+    } else {
         orderRef = await addDoc(collection(db, 'orders'), orderDocData);
         console.log(`New order ${orderRef.id} created with status: ${orderData.status}`);
     }
@@ -128,7 +130,7 @@ export async function updateOrderStatus(
     };
 
     if (paymentDetails) {
-      if (paymentDetails.paymentGatewayId !== undefined) { // Check for undefined explicitly
+      if (paymentDetails.paymentGatewayId !== undefined) {
         updateData.paymentGatewayId = paymentDetails.paymentGatewayId;
       }
       if (paymentDetails.paymentMethod) {
@@ -154,6 +156,78 @@ export async function updateOrderStatus(
     return { success: true, message: `Order ${orderId} status updated to ${status}.` };
   } catch (error) {
     console.error(`Error updating order ${orderId} status:`, error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+    return { success: false, message: `Failed to update order status: ${errorMessage}` };
+  }
+}
+
+export async function handleAdminUpdateOrderStatus(
+  orderId: string,
+  newStatus: OrderStatus
+): Promise<{ success: boolean; message?: string }> {
+  if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+    return { success: false, message: "Firebase Project ID not configured." };
+  }
+  if (!orderId) {
+    return { success: false, message: "Order ID is required." };
+  }
+
+  try {
+    const orderDocRef = doc(db, 'orders', orderId);
+    const orderSnap = await getDoc(orderDocRef);
+    if (!orderSnap.exists()) {
+      return { success: false, message: "Order not found." };
+    }
+    const orderData = orderSnap.data();
+
+    const updateData: any = {
+      status: newStatus,
+      lastUpdatedAt: serverTimestamp(),
+    };
+
+    // Update the order
+    await updateDoc(orderDocRef, updateData);
+
+    // Find and update the corresponding transaction record status
+    if (orderData.paymentGatewayId) {
+      const transactionQuery = query(
+        collection(db, "transactions"),
+        where("paymentGatewayId", "==", orderData.paymentGatewayId),
+        limit(1)
+      );
+      const transactionSnapshot = await getDocs(transactionQuery);
+      if (!transactionSnapshot.empty) {
+        const transactionDocRef = transactionSnapshot.docs[0].ref;
+        await updateDoc(transactionDocRef, {
+          status: newStatus, // Align transaction status with order status
+          updatedAt: serverTimestamp(),
+        });
+        console.log(`Transaction for PGID ${orderData.paymentGatewayId} updated to ${newStatus}.`);
+      } else {
+        console.warn(`No transaction found for Payment Gateway ID: ${orderData.paymentGatewayId} when updating order ${orderId} to ${newStatus}.`);
+      }
+    }
+
+
+    if (newStatus === 'completed') {
+      // Placeholder for sending email notification to user
+      // const userEmail = orderData.userEmail;
+      // if (userEmail) {
+      //   console.log(`TODO: Send order completion email to ${userEmail} for order ${orderId}`);
+      //   // await sendOrderCompletionEmail(userEmail, orderId, orderData.items);
+      // }
+    }
+
+    revalidatePath('/admin/orders');
+    revalidatePath('/my-orders');
+    revalidatePath(`/orders/${orderId}`);
+    if (newStatus === "completed") {
+      revalidatePath('/admin'); // For dashboard stats
+    }
+
+    return { success: true, message: `Order ${orderId} status updated to ${newStatus}.` };
+  } catch (error) {
+    console.error(`Error updating order ${orderId} status by admin:`, error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
     return { success: false, message: `Failed to update order status: ${errorMessage}` };
   }
@@ -240,7 +314,6 @@ export async function handleBatchUpdateMissingOrderData(): Promise<{ success: bo
       const updatePayload: any = {};
       let needsUpdate = false;
 
-      // 1. Check and fix actualAmountPaid
       if (typeof orderData.actualAmountPaid !== 'number' || isNaN(orderData.actualAmountPaid)) {
         const region = getRegionByCode(orderData.regionCode) || defaultRegion;
         let calculatedAmount = (orderData.totalAmountUSD || 0) * region.conversionRateToUSD;
@@ -253,16 +326,14 @@ export async function handleBatchUpdateMissingOrderData(): Promise<{ success: bo
         needsUpdate = true;
       }
 
-      // 2. Check and fix currencyCode
       if (!orderData.currencyCode || orderData.currencyCode === "N/A") {
         const region = getRegionByCode(orderData.regionCode) || defaultRegion;
         updatePayload.currencyCode = region.currencyCode;
         needsUpdate = true;
       }
       
-      // 3. Check and fix paymentMethod
       if (!orderData.paymentMethod || orderData.paymentMethod === "N/A" || orderData.paymentMethod === "") {
-        updatePayload.paymentMethod = "mock" as PaymentMethod; // Set to "mock" as requested
+        updatePayload.paymentMethod = "mock" as PaymentMethod;
         needsUpdate = true;
       }
 
@@ -279,7 +350,7 @@ export async function handleBatchUpdateMissingOrderData(): Promise<{ success: bo
     }
 
     revalidatePath('/admin/orders');
-    revalidatePath('/admin'); // For dashboard stats if they depend on these fields
+    revalidatePath('/admin');
 
     if (errors.length > 0) {
       return { success: false, message: `Batch update completed with ${errors.length} errors. ${updatedCount} orders updated.`, updatedCount, errors };
@@ -292,3 +363,5 @@ export async function handleBatchUpdateMissingOrderData(): Promise<{ success: bo
     return { success: false, message: errorMessage, updatedCount: 0, errors: [{orderId: 'batch_commit', error: errorMessage}] };
   }
 }
+
+    

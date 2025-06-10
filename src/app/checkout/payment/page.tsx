@@ -10,20 +10,20 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { getRegionByCode, defaultRegion, type Region } from '@/data/regionData';
-import type { Book } from '@/data/books'; // Full Book type for items
+import type { Book } from '@/data/books'; 
 import ErrorDisplay from '@/components/layout/ErrorDisplay';
 import { type PaymentMethod } from '@/lib/payment-service';
-import { getOrderByIdFromDb, type OrderWithUserDetails } from '@/lib/tracking-service-firebase'; // For retry
+import { getOrderByIdFromDb, type OrderWithUserDetails } from '@/lib/tracking-service-firebase';
 import type { OrderItemInput } from '@/lib/actions/trackingActions';
 
 
 interface CheckoutData {
-  items: OrderItemInput[]; // Use OrderItemInput from the start
-  totalAmountUSD: number; // Base USD total
+  items: OrderItemInput[];
+  totalAmountUSD: number; 
   selectedRegionCode: string;
-  currencyCode: string; // Currency code of the selected region for display
+  currencyCode: string; 
   itemCount: number;
-  orderIdToRetry?: string; // For retrying a specific order
+  orderIdToRetry?: string; 
 }
 
 function PaymentPageContent() {
@@ -62,10 +62,10 @@ function PaymentPageContent() {
             const finalDisplayAmount = regionForDisplay.currencyCode === 'KES' ? Math.round(convertedAmount) : parseFloat(convertedAmount.toFixed(2));
             
             setCheckoutData({
-              items: orderToRetry.items.map(item => ({ // Ensure mapping to OrderItemInput
+              items: orderToRetry.items.map(item => ({
                 bookId: item.bookId,
                 title: item.title,
-                price: item.price, // Price should be from the original order item
+                price: item.price, 
                 coverImageUrl: item.coverImageUrl,
                 pdfUrl: item.pdfUrl,
                 dataAiHint: item.dataAiHint,
@@ -93,7 +93,7 @@ function PaymentPageContent() {
         const dataString = sessionStorage.getItem('bookwiseCheckoutData');
         if (dataString) {
           try {
-            const parsedData: Omit<CheckoutData, 'items'> & { cartItems: Book[] } = JSON.parse(dataString); // cartItems is Book[] from session
+            const parsedData: Omit<CheckoutData, 'items'> & { cartItems: Book[] } = JSON.parse(dataString); 
             if (!parsedData.cartItems || parsedData.cartItems.length === 0) {
               setError("No items in cart for checkout. Please return to your cart.");
               setCheckoutData(null);
@@ -103,10 +103,10 @@ function PaymentPageContent() {
               const finalDisplayAmount = regionForDisplay.currencyCode === 'KES' ? Math.round(convertedAmount) : parseFloat(convertedAmount.toFixed(2));
 
               setCheckoutData({
-                items: parsedData.cartItems.map(book => ({ // Map Book to OrderItemInput
+                items: parsedData.cartItems.map(book => ({ 
                     bookId: book.id,
                     title: book.title,
-                    price: book.price, // This is USD price from book catalog
+                    price: book.price, 
                     coverImageUrl: book.coverImageUrl,
                     pdfUrl: book.pdfUrl,
                     dataAiHint: book.dataAiHint,
@@ -127,12 +127,12 @@ function PaymentPageContent() {
         } else {
           setError("No checkout information found. Redirecting to shop...");
           setCheckoutData(null);
-          router.replace('/shop'); // Redirect if no data
+          router.replace('/shop');
         }
       }
       setIsLoadingPage(false);
     };
-    if (!authIsLoading) { // Only load data once auth state is resolved
+    if (!authIsLoading) {
         loadData();
     }
   }, [searchParams, router, currentUser, authIsLoading]);
@@ -158,23 +158,27 @@ function PaymentPageContent() {
       return;
     }
     
-    // Clear cart only if this wasn't a retry of an existing order
     if (!checkoutData.orderIdToRetry) {
       await clearCart(true); 
       sessionStorage.removeItem('bookwiseCheckoutData');
     }
 
-    let toastMessage = message || "Payment initiated. Your order is being processed.";
-    if (method === 'mpesa') {
-      toastMessage = message || "STK Push sent. Please complete payment on your phone. Your order is being processed.";
+    let toastTitle = "Payment Processing";
+    let toastMessage = message || "Your order is being processed.";
+
+    if (method === 'mock') {
+      toastTitle = "Mock Payment Complete!";
+      toastMessage = message || "Mock Payment Successful! Order created.";
+    } else if (method === 'mpesa') {
+      toastTitle = "STK Push Sent";
+      toastMessage = message || "Please complete payment on your phone. Order is pending confirmation.";
     } else if (method === 'stripe') {
-       toastMessage = message || "Processing your Stripe payment. Your order status will update shortly.";
-    } else if (method === 'mock') {
-       toastMessage = message || "Mock Payment Successful! Order created.";
+      toastTitle = "Payment Submitted";
+      toastMessage = message || "Your Stripe payment is being processed. Order is pending confirmation.";
     }
     
     toast({ 
-        title: method === 'mock' ? "Mock Payment Complete!" : "Payment Processing", 
+        title: toastTitle, 
         description: `${toastMessage} You will be redirected to view your order.`,
         duration: 10000 
     });
@@ -190,15 +194,10 @@ function PaymentPageContent() {
         duration: 7000,
     });
     if (orderId) {
-      // If an orderId exists (meaning a pending order was created or we are retrying)
-      // keep the user on the payment page, or redirect them to the specific order page to retry.
-      // For now, we'll keep them here, error is shown by PaymentHandler.
-      // Or, if it's a retry:
       if (checkoutData?.orderIdToRetry) {
         router.push(`/orders/${checkoutData.orderIdToRetry}?payment_failed=true`);
       }
     }
-    // If no orderId, it implies a very early failure, let user retry or select another method.
   }
 
 
@@ -239,14 +238,10 @@ function PaymentPageContent() {
     )
   }
   
-  // Determine API amount and currency based on selected payment method contextually in PaymentHandler
-  // For now, pass base USD and display currency details. PaymentHandler will decide final API values.
   const itemsForPaymentHandler: OrderItemInput[] = checkoutData.items.map(item => ({
     bookId: item.bookId,
     title: item.title,
-    // price for OrderItemInput should be the price in the order's currency if retrying,
-    // or the base USD price from catalog if new order
-    price: checkoutData.orderIdToRetry ? item.price : item.price, // Assuming item.price is already correct from source
+    price: checkoutData.orderIdToRetry ? item.price : item.price,
     coverImageUrl: item.coverImageUrl,
     pdfUrl: item.pdfUrl,
     dataAiHint: item.dataAiHint,
@@ -287,9 +282,8 @@ function PaymentPageContent() {
               email={currentUser.email || undefined}
               onSuccess={handlePaymentInitiationSuccess}
               onError={handlePaymentError}
-              regionCode={checkoutData.selectedRegionCode} // Pass the region code of the order
+              regionCode={checkoutData.selectedRegionCode}
               itemCount={checkoutData.itemCount}
-              // No currencyCodeForDisplay or amountInSelectedCurrency here, PaymentHandler calculates from regionCode and amountUSD
           />
         </CardContent>
       </Card>
@@ -310,6 +304,4 @@ export default function PaymentPage() {
     </Suspense>
   );
 }
-
-
     

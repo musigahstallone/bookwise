@@ -1,8 +1,8 @@
 
 // src/app/admin/orders/page.tsx
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, ShoppingCart, ExternalLink } from 'lucide-react';
-import { getAllOrdersWithUserDetailsFromDb, type OrderWithUserDetails } from '@/lib/tracking-service-firebase';
+import { AlertTriangle, ShoppingCart, MoreHorizontal, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { getAllOrdersWithUserDetailsFromDb, type OrderWithUserDetails, type OrderStatus } from '@/lib/tracking-service-firebase';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,9 +13,28 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { getRegionByCode, defaultRegion } from '@/data/regionData'; // Import for formatting
+import { getRegionByCode, defaultRegion } from '@/data/regionData';
+import AdminOrderActions from '@/components/admin/orders/AdminOrderActions'; // New component
 
 const ORDERS_PER_PAGE = 10;
 
@@ -25,7 +44,6 @@ interface ManageOrdersPageProps {
   };
 }
 
-// Helper function for price formatting, similar to other contexts
 const formatAdminOrderPrice = (totalAmountUSD: number, orderRegionCode: string, orderCurrencyCode: string) => {
   const regionForOrder = getRegionByCode(orderRegionCode) || defaultRegion;
   const convertedPrice = totalAmountUSD * regionForOrder.conversionRateToUSD;
@@ -72,7 +90,7 @@ export default async function ManageOrdersPage({ searchParams }: ManageOrdersPag
           <h1 className="text-3xl font-headline font-bold text-primary flex items-center">
             <ShoppingCart className="mr-3 h-8 w-8" /> Manage Orders
           </h1>
-          <p className="text-muted-foreground">View all customer orders.</p>
+          <p className="text-muted-foreground">View all customer orders and manage their status.</p>
         </div>
       </div>
 
@@ -103,19 +121,24 @@ export default async function ManageOrdersPage({ searchParams }: ManageOrdersPag
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[150px]">Order ID</TableHead>
+                        <TableHead className="w-[100px] sm:w-[150px]">Order ID</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead className="hidden md:table-cell">Date</TableHead>
                         <TableHead className="text-right">Items</TableHead>
                         <TableHead className="text-right">Total (Order Currency)</TableHead>
                         <TableHead className="hidden sm:table-cell">Region</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead className="text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedOrders.map((order) => (
                         <TableRow key={order.id}>
-                          <TableCell className="font-mono text-xs truncate" title={order.id}>{order.id.substring(0,8)}...</TableCell>
+                          <TableCell className="font-mono text-xs truncate" title={order.id}>
+                            <Link href={`/orders/${order.id}`} className="hover:underline text-primary" target="_blank">
+                                {order.id.substring(0,8)}...
+                            </Link>
+                          </TableCell>
                           <TableCell>
                             <div className="font-medium">{order.userName || 'N/A'}</div>
                             <div className="text-xs text-muted-foreground">{order.userEmail}</div>
@@ -125,9 +148,22 @@ export default async function ManageOrdersPage({ searchParams }: ManageOrdersPag
                           <TableCell className="text-right">{formatAdminOrderPrice(order.totalAmountUSD, order.regionCode, order.currencyCode)}</TableCell>
                           <TableCell className="hidden sm:table-cell">{order.regionCode} ({order.currencyCode})</TableCell>
                           <TableCell>
-                            <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
+                            <Badge 
+                                variant={
+                                    order.status === 'completed' ? 'default' : 
+                                    order.status === 'pending' ? 'secondary' : 
+                                    'destructive'
+                                } 
+                                className={
+                                    order.status === 'completed' ? 'bg-green-500 hover:bg-green-600' :
+                                    order.status === 'pending' ? 'bg-yellow-500 hover:bg-yellow-600' : ''
+                                }
+                            >
                               {order.status}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <AdminOrderActions orderId={order.id} currentStatus={order.status} />
                           </TableCell>
                         </TableRow>
                       ))}
@@ -154,4 +190,4 @@ export default async function ManageOrdersPage({ searchParams }: ManageOrdersPag
     </div>
   );
 }
-
+    
