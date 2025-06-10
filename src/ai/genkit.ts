@@ -5,9 +5,9 @@ import { googleAI } from "@genkit-ai/googleai";
 import { GenkitPlugin } from "genkit/plugin";
 
 const plugins: GenkitPlugin[] = [];
-const genkitIsConfigured = !!process.env.GOOGLE_API_KEY;
+const genkitIsConfiguredInternally = !!process.env.GOOGLE_API_KEY;
 
-if (genkitIsConfigured) {
+if (genkitIsConfiguredInternally) {
   plugins.push(googleAI());
 } else {
   // Log a warning if the key is missing, visible in build logs or server logs
@@ -25,5 +25,5 @@ export const ai = genkit({
   // Models should be specified in prompt/flow definitions or generate calls.
 });
 
-// Export a flag that can be used by other parts of the app
-export const isGenkitConfigured = genkitIsConfigured;
+// Removed export of isGenkitConfigured. Server components should check process.env.GOOGLE_API_KEY directly.
+// Client components should receive this as a prop if needed.
