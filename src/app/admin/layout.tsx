@@ -2,36 +2,43 @@
 'use client'; 
 
 import { useEffect, useState } from 'react'; 
-import { useRouter, usePathname } from 'next/navigation'; // Added usePathname
+import { useRouter, usePathname } from 'next/navigation';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { Toaster } from "@/components/ui/toaster";
-import { useAuth, type CombinedUser } from '@/contexts/AuthContext';
-import { Loader2, ShieldAlert, Menu, BookCopy as AdminLogoIcon, X as CloseIcon } from 'lucide-react'; 
+import { useAuth } from '@/contexts/AuthContext'; // No CombinedUser type needed here directly
+import { Loader2, ShieldAlert, Menu, BookCopy as AdminLogoIcon, X as CloseIcon, LogOut, UserCircle as UserProfileIcon } from 'lucide-react'; 
 import Link from 'next/link'; 
 import { Button } from '@/components/ui/button'; 
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet'; 
+import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils'; 
-import { navItems as adminNavItems } from '@/components/admin/AdminSidebar';
+import { navItems as adminNavItems } from '@/components/admin/AdminSidebar'; // Using exported navItems
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { currentUser, isLoading } = useAuth();
-  const router = useRouter(); // Keep for navigation
-  const currentPathname = usePathname(); // Use for path checking
+  const { currentUser, isLoading: authIsLoading, logout } = useAuth(); // Destructure logout and authIsLoading
+  const router = useRouter();
+  const currentPathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (!isLoading) {
+    if (!authIsLoading) {
       if (!currentUser || !currentUser.firestoreData || currentUser.firestoreData.role !== 'admin') {
         router.replace('/'); 
       }
     }
-  }, [currentUser, isLoading, router]);
+  }, [currentUser, authIsLoading, router]);
 
-  if (isLoading) {
+  const handleLogout = async () => {
+    await logout();
+    setIsMobileMenuOpen(false); // Close menu on logout
+    router.push('/login'); // Redirect to login after admin logout
+  };
+
+  if (authIsLoading) {
     return (
       <>
         <div className="flex min-h-screen bg-background">
@@ -57,6 +64,9 @@ export default function AdminLayout({
       </div>
     );
   }
+  
+  const adminName = currentUser.firestoreData?.name || currentUser.displayName || "Admin";
+  const adminEmail = currentUser.email || "No email";
 
   return (
     <>
@@ -76,7 +86,7 @@ export default function AdminLayout({
                   <span className="sr-only">Open Admin Menu</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[280px] bg-card text-card-foreground p-0">
+              <SheetContent side="right" className="w-[280px] bg-card text-card-foreground p-0 flex flex-col">
                 <SheetHeader className="p-4 border-b">
                   <SheetTitle className="flex items-center text-primary">
                     <AdminLogoIcon className="h-6 w-6 mr-2" />
@@ -87,33 +97,49 @@ export default function AdminLayout({
                       <span className="sr-only">Close</span>
                   </SheetClose>
                 </SheetHeader>
-                <nav className="flex flex-col space-y-1 p-4">
-                  {adminNavItems.map((item) => (
-                    <SheetClose asChild key={item.label}>
-                      <Link
-                        href={item.href}
-                        className={cn(
-                          "flex items-center rounded-md px-3 py-2.5 text-base font-medium hover:bg-muted",
-                          (currentPathname === item.href || 
-                           (typeof currentPathname === 'string' && item.href !== '/admin' && currentPathname.startsWith(item.href)))
-                            ? "bg-muted text-primary"
-                            : "text-foreground"
-                        )}
-                        onClick={() => setIsMobileMenuOpen(false)}
-                      >
-                        <item.icon className="mr-3 h-5 w-5" />
-                        {item.label}
-                      </Link>
-                    </SheetClose>
-                  ))}
-                  <div className="pt-4 mt-4 border-t">
-                    <SheetClose asChild>
-                       <Button variant="outline" className="w-full justify-start text-base py-2.5 px-3" asChild>
-                          <Link href="/"> <AdminLogoIcon className="mr-3 h-5 w-5" /> Back to Main Site</Link>
-                       </Button>
-                    </SheetClose>
+                
+                <ScrollArea className="flex-grow"> {/* Make nav scrollable */}
+                  <nav className="flex flex-col space-y-1 p-4">
+                    {adminNavItems.map((item) => (
+                      <SheetClose asChild key={item.label}>
+                        <Link
+                          href={item.href}
+                          className={cn(
+                            "flex items-center rounded-md px-3 py-2.5 text-base font-medium hover:bg-muted",
+                            (currentPathname === item.href || 
+                             (typeof currentPathname === 'string' && item.href !== '/admin' && currentPathname.startsWith(item.href)))
+                              ? "bg-muted text-primary"
+                              : "text-foreground"
+                          )}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                          <item.icon className="mr-3 h-5 w-5" />
+                          {item.label}
+                        </Link>
+                      </SheetClose>
+                    ))}
+                  </nav>
+                </ScrollArea>
+
+                <div className="mt-auto p-4 border-t"> {/* Footer section for profile and logout */}
+                  <div className="mb-4 p-3 rounded-md bg-muted/50">
+                    <div className="flex items-center mb-1">
+                      <UserProfileIcon className="h-5 w-5 mr-2 text-primary"/>
+                      <p className="text-sm font-semibold text-foreground truncate" title={adminName}>{adminName}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate" title={adminEmail}>{adminEmail}</p>
                   </div>
-                </nav>
+                  <Separator className="my-3"/>
+                  <SheetClose asChild>
+                     <Button variant="outline" className="w-full justify-start text-base py-2.5 px-3 mb-2" asChild>
+                        <Link href="/"> <AdminLogoIcon className="mr-3 h-5 w-5" /> Back to Main Site</Link>
+                     </Button>
+                  </SheetClose>
+                  <Button variant="ghost" onClick={handleLogout} className="w-full justify-start text-base py-2.5 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive">
+                    <LogOut className="mr-3 h-5 w-5" />
+                    Logout
+                  </Button>
+                </div>
               </SheetContent>
             </Sheet>
           </header>
