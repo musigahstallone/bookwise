@@ -4,14 +4,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, onSnapshot, Timestamp, doc, getDoc } from 'firebase/firestore';
-import { type OrderWithUserDetails } from '@/lib/tracking-service-firebase';
+import { type OrderWithUserDetails, type OrderStatus } from '@/lib/tracking-service-firebase';
 import { getUserDocumentFromDb } from '@/lib/user-service-firebase';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose } from "@/components/ui/sheet";
-import { ChevronRight, Package, CalendarDays, User, Tag, DollarSign, Smartphone, CreditCard, LayersIcon, Info } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ChevronRight, Package, CalendarDays, User, DollarSign, Smartphone, CreditCard, LayersIcon, Info, Search, ListFilter, FilterX, Palette } from 'lucide-react';
 import { format } from 'date-fns';
 import PaginationControls from '@/components/books/PaginationControls';
 import AdminOrderActions from '@/components/admin/orders/AdminOrderActions';
@@ -20,10 +22,12 @@ import { formatCurrency } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const ORDERS_PER_PAGE = 10;
-const KES_CONVERSION_RATE = getRegionByCode('KE')?.conversionRateToUSD || 130.50; // Fallback if KE region not found
+const KES_CONVERSION_RATE = getRegionByCode('KE')?.conversionRateToUSD || 130.50; 
+
+const orderStatuses: OrderStatus[] = ["pending", "completed", "failed", "cancelled"];
 
 interface AdminOrderListClientProps {
-  initialOrders: OrderWithUserDetails[]; // For initial hydration, real-time takes over
+  initialOrders: OrderWithUserDetails[]; 
 }
 
 export default function AdminOrderListClient({ initialOrders }: AdminOrderListClientProps) {
@@ -35,6 +39,9 @@ export default function AdminOrderListClient({ initialOrders }: AdminOrderListCl
   const [isMobileView, setIsMobileView] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'all'>('all');
+
   useEffect(() => {
     const checkMobile = () => setIsMobileView(window.innerWidth < 768);
     checkMobile();
@@ -45,7 +52,6 @@ export default function AdminOrderListClient({ initialOrders }: AdminOrderListCl
   const processFirestoreOrderDoc = async (orderDoc: any): Promise<OrderWithUserDetails> => {
     const orderData = orderDoc.data();
     let user = null;
-    // Attempt to fetch user details, but don't block if it fails for some reason
     try {
       user = await getUserDocumentFromDb(orderData.userId);
     } catch (userError) {
@@ -56,10 +62,10 @@ export default function AdminOrderListClient({ initialOrders }: AdminOrderListCl
       id: orderDoc.id,
       userId: orderData.userId,
       userName: user?.name || 'Unknown User',
-      userEmail: user?.email || orderData.userEmail || 'N/A', // Fallback to email from order if available
+      userEmail: user?.email || orderData.userEmail || 'N/A',
       items: orderData.items || [],
       totalAmountUSD: orderData.totalAmountUSD || 0,
-      actualAmountPaid: orderData.actualAmountPaid, // Keep as is, formatting done at display
+      actualAmountPaid: orderData.actualAmountPaid, 
       orderDate: (orderData.orderDate as Timestamp)?.toDate() || new Date(0),
       lastUpdatedAt: (orderData.lastUpdatedAt as Timestamp)?.toDate() || (orderData.orderDate as Timestamp)?.toDate() || new Date(0),
       regionCode: orderData.regionCode || defaultRegion.code,
@@ -96,23 +102,51 @@ export default function AdminOrderListClient({ initialOrders }: AdminOrderListCl
     return () => unsubscribe();
   }, []);
 
+  const filteredOrders = useMemo(() => {
+    let currentOrders = orders;
+    if (selectedStatus !== 'all') {
+      currentOrders = currentOrders.filter(order => order.status === selectedStatus);
+    }
+    if (searchTerm) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      currentOrders = currentOrders.filter(order =>
+        order.id.toLowerCase().includes(lowerSearchTerm) ||
+        (order.userName && order.userName.toLowerCase().includes(lowerSearchTerm)) ||
+        (order.userEmail && order.userEmail.toLowerCase().includes(lowerSearchTerm)) ||
+        (order.paymentGatewayId && order.paymentGatewayId.toLowerCase().includes(lowerSearchTerm))
+      );
+    }
+    return currentOrders;
+  }, [orders, searchTerm, selectedStatus]);
+
+
   const handleOrderClick = (order: OrderWithUserDetails) => {
     setSelectedOrder(order);
     setIsDetailViewOpen(true);
   };
 
-  const totalPages = Math.ceil(orders.length / ORDERS_PER_PAGE);
+  const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
   const paginatedOrders = useMemo(() => {
     const startIndex = (currentPage - 1) * ORDERS_PER_PAGE;
     const endIndex = startIndex + ORDERS_PER_PAGE;
-    return orders.slice(startIndex, endIndex);
-  }, [orders, currentPage]);
+    return filteredOrders.slice(startIndex, endIndex);
+  }, [filteredOrders, currentPage]);
 
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
   }, []);
 
-  if (isLoading && orders.length === 0) { // Show skeleton only on initial load
+  const getStatusBadgeColorClasses = (status?: string): string => {
+    switch (status?.toLowerCase()) {
+      case 'completed': return 'bg-green-100 text-green-700 border-green-300';
+      case 'pending': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+      case 'failed': case 'cancelled': return 'bg-red-100 text-red-700 border-red-300';
+      default: return 'bg-gray-100 text-gray-700 border-gray-300';
+    }
+  };
+
+
+  if (isLoading && orders.length === 0) { 
     return (
       <div className="space-y-4 mt-6">
         {[...Array(5)].map((_, i) => (
@@ -130,24 +164,16 @@ export default function AdminOrderListClient({ initialOrders }: AdminOrderListCl
     return <div className="mt-6 p-4 bg-destructive/10 text-destructive border border-destructive/20 rounded-md">{error}</div>;
   }
 
-  if (orders.length === 0 && !isLoading) {
-    return <p className="mt-6 text-center text-muted-foreground">No orders found.</p>;
-  }
 
   const DetailViewContent = ({ order }: { order: OrderWithUserDetails }) => (
     <>
-      <ScrollArea className="max-h-[70vh] sm:max-h-[80vh]">
+      <ScrollArea className="max-h-[calc(100vh-14rem)] sm:max-h-[calc(100vh-10rem)]"> {/* Adjusted max height */}
         <div className="p-4 sm:p-6 space-y-4 text-sm">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
             <div><strong>Order ID:</strong> <span className="font-mono text-xs break-all">{order.id}</span></div>
             <div><strong>Date:</strong> {format(order.orderDate, "PPPpp")}</div>
             <div><strong>Customer:</strong> {order.userName} ({order.userEmail})</div>
-            <div><strong>Status:</strong> <Badge variant={
-              order.status === 'completed' ? 'default' : 
-              order.status === 'pending' ? 'secondary' : 
-              'destructive'} 
-              className={order.status === 'completed' ? 'bg-green-500 hover:bg-green-600' : ''}
-              >{order.status}</Badge>
+            <div><strong>Status:</strong> <Badge className={`capitalize text-xs ${getStatusBadgeColorClasses(order.status)}`}>{order.status}</Badge>
             </div>
           </div>
           
@@ -161,30 +187,29 @@ export default function AdminOrderListClient({ initialOrders }: AdminOrderListCl
             </h4>
             <p><strong>Method:</strong> {order.paymentMethod || 'N/A'}</p>
             <p><strong>Total (USD):</strong> {formatCurrency(order.totalAmountUSD, 'USD', 'US')}</p>
-            {order.paymentMethod === 'mpesa' && (
-              <p><strong>Amount (KES Estimate):</strong> {formatCurrency(order.totalAmountUSD * KES_CONVERSION_RATE, 'KES', 'KE')}</p>
-            )}
-             {order.actualAmountPaid && (
-              <p><strong>Actual Paid ({order.currencyCode}):</strong> {formatCurrency(order.actualAmountPaid, order.currencyCode, order.regionCode)}</p>
-            )}
+            <p><strong>Actual Paid ({order.currencyCode || 'N/A'}):</strong> {formatCurrency(order.actualAmountPaid, order.currencyCode, order.regionCode)}</p>
+            <p><strong>Gateway ID:</strong> <span className="font-mono text-xs break-all">{order.paymentGatewayId || 'N/A'}</span></p>
           </div>
 
           <div className="border-t pt-3 mt-3">
             <h4 className="font-semibold mb-2 flex items-center"><Package className="mr-2 h-5 w-5"/> Items ({order.itemCount})</h4>
-            <ul className="space-y-2 max-h-60 overflow-y-auto pr-2">
-              {order.items.map((item, index) => (
-                <li key={index} className="p-2 border rounded-md bg-muted/30">
-                  <div className="flex justify-between items-start">
-                    <span className="font-medium flex-1 pr-2">{item.title}</span>
-                    <span className="text-muted-foreground">{formatCurrency(item.price, 'USD', 'US')}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <ScrollArea className="max-h-48 pr-2"> {/* Scrollable item list if many items */}
+              <ul className="space-y-2">
+                {order.items.map((item, index) => (
+                  <li key={index} className="p-2 border rounded-md bg-muted/30 text-xs">
+                    <div className="flex justify-between items-start">
+                      <span className="font-medium flex-1 pr-2">{item.title}</span>
+                      <span className="text-muted-foreground">{formatCurrency(item.price, 'USD', 'US')}</span>
+                    </div>
+                    <p className="text-muted-foreground/70">Book ID: {item.bookId}</p>
+                  </li>
+                ))}
+              </ul>
+            </ScrollArea>
           </div>
         </div>
       </ScrollArea>
-      <div className="p-4 sm:p-6 border-t">
+      <div className="p-4 sm:p-6 border-t mt-auto">
         <AdminOrderActions orderId={order.id} currentStatus={order.status} onStatusChange={() => setIsDetailViewOpen(false)} />
       </div>
     </>
@@ -192,6 +217,41 @@ export default function AdminOrderListClient({ initialOrders }: AdminOrderListCl
 
   return (
     <>
+      <div className="mb-6 p-4 bg-card border rounded-lg shadow-sm">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search Order ID, Name, Email, Gateway ID..."
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              className="pl-10 pr-4 py-2 text-sm rounded-md"
+            />
+          </div>
+          <div className="relative">
+            <Select value={selectedStatus} onValueChange={(value) => { setSelectedStatus(value as OrderStatus | 'all'); setCurrentPage(1); }}>
+              <SelectTrigger className="w-full text-sm py-2 rounded-md">
+                <ListFilter className="h-4 w-4 text-muted-foreground mr-2" />
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="capitalize text-sm">All Statuses</SelectItem>
+                {orderStatuses.map(status => (
+                  <SelectItem key={status} value={status} className="capitalize text-sm">
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+      
+      {paginatedOrders.length === 0 && !isLoading && (
+         <p className="mt-6 text-center text-muted-foreground">No orders match your current search/filter.</p>
+      )}
+
       <div className="mt-6 space-y-3">
         {paginatedOrders.map((order) => (
           <div 
@@ -203,13 +263,9 @@ export default function AdminOrderListClient({ initialOrders }: AdminOrderListCl
               <div className="flex-grow">
                 <h3 className="font-semibold text-primary text-base sm:text-lg">{order.userName}</h3>
                 <p className="text-xs text-muted-foreground">{order.userEmail}</p>
+                <p className="text-xs text-muted-foreground font-mono">ID: {order.id.substring(0,12)}...</p>
               </div>
-              <Badge variant={
-                order.status === 'completed' ? 'default' : 
-                order.status === 'pending' ? 'secondary' : 
-                'destructive'} 
-                className={`text-xs sm:text-sm mt-1 sm:mt-0 ${order.status === 'completed' ? 'bg-green-500 hover:bg-green-600' : ''}`}
-              >
+              <Badge className={`capitalize text-xs sm:text-sm mt-1 sm:mt-0 ${getStatusBadgeColorClasses(order.status)}`}>
                 {order.status}
               </Badge>
             </div>
@@ -217,7 +273,6 @@ export default function AdminOrderListClient({ initialOrders }: AdminOrderListCl
               <p className="flex items-center"><CalendarDays className="mr-1.5 h-3.5 w-3.5"/> {format(order.orderDate, "dd/MM/yyyy h:mm a")}</p>
               <p className="flex items-center"><Package className="mr-1.5 h-3.5 w-3.5"/> {order.itemCount} item(s)</p>
               <p className="flex items-center font-medium text-foreground col-span-2 sm:col-span-1 sm:justify-end">
-                {/* <DollarSign className="mr-1 h-3.5 w-3.5"/>  */}
                 {formatCurrency(order.totalAmountUSD, 'USD', 'US')}
               </p>
             </div>
@@ -241,34 +296,26 @@ export default function AdminOrderListClient({ initialOrders }: AdminOrderListCl
       {selectedOrder && (
         isMobileView ? (
           <Drawer open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}>
-            <DrawerContent className="max-h-[85vh]">
-              <DrawerHeader className="text-left">
+            <DrawerContent className="max-h-[85vh] flex flex-col">
+              <DrawerHeader className="text-left flex-shrink-0">
                 <DrawerTitle>Order Details</DrawerTitle>
                 <DrawerDescription>Review and manage order: {selectedOrder.id.substring(0,8)}...</DrawerDescription>
               </DrawerHeader>
-              <DetailViewContent order={selectedOrder} />
-              <DrawerFooter className="pt-2">
-                <DrawerClose asChild>
-                  <Button variant="outline">Close</Button>
-                </DrawerClose>
-              </DrawerFooter>
+              <div className="flex-grow overflow-hidden">
+                 <DetailViewContent order={selectedOrder} />
+              </div>
             </DrawerContent>
           </Drawer>
         ) : (
           <Sheet open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}>
-            <SheetContent className="sm:max-w-lg w-full flex flex-col">
-              <SheetHeader>
+            <SheetContent className="sm:max-w-lg w-full flex flex-col p-0">
+              <SheetHeader className="p-4 sm:p-6 border-b flex-shrink-0">
                 <SheetTitle>Order Details</SheetTitle>
                 <SheetDescription>Review and manage order: {selectedOrder.id.substring(0,8)}...</SheetDescription>
               </SheetHeader>
               <div className="flex-grow overflow-hidden">
                  <DetailViewContent order={selectedOrder} />
               </div>
-               <SheetFooter className="pt-2 mt-auto"> {/* Ensure footer is at bottom */}
-                 <SheetClose asChild>
-                   <Button variant="outline">Close</Button>
-                 </SheetClose>
-               </SheetFooter>
             </SheetContent>
           </Sheet>
         )

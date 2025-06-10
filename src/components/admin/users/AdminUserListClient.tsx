@@ -10,7 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose } from "@/components/ui/sheet";
-import { ChevronRight, Users, CalendarDays, Mail, ShieldCheck, Edit } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ChevronRight, Users, CalendarDays, Mail, ShieldCheck, Edit, Search, ListFilter } from 'lucide-react';
 import { format } from 'date-fns';
 import PaginationControls from '@/components/books/PaginationControls';
 import Link from 'next/link';
@@ -30,6 +32,9 @@ export default function AdminUserListClient({ initialUsers }: AdminUserListClien
   const [isDetailViewOpen, setIsDetailViewOpen] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedRole, setSelectedRole] = useState('all');
 
   useEffect(() => {
     const checkMobile = () => setIsMobileView(window.innerWidth < 768);
@@ -64,17 +69,36 @@ export default function AdminUserListClient({ initialUsers }: AdminUserListClien
     return () => unsubscribe();
   }, []);
 
+  const userRoles = useMemo(() => {
+    const roles = new Set(users.map(user => user.role));
+    return ['all', ...Array.from(roles).sort()];
+  }, [users]);
+
+  const filteredUsers = useMemo(() => {
+    let currentUsers = users;
+    if (selectedRole !== 'all') {
+      currentUsers = currentUsers.filter(user => user.role === selectedRole);
+    }
+    if (searchTerm) {
+      currentUsers = currentUsers.filter(user =>
+        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    return currentUsers;
+  }, [users, searchTerm, selectedRole]);
+
   const handleUserClick = (user: User) => {
     setSelectedUser(user);
     setIsDetailViewOpen(true);
   };
 
-  const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
+  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
   const paginatedUsers = useMemo(() => {
     const startIndex = (currentPage - 1) * USERS_PER_PAGE;
     const endIndex = startIndex + USERS_PER_PAGE;
-    return users.slice(startIndex, endIndex);
-  }, [users, currentPage]);
+    return filteredUsers.slice(startIndex, endIndex);
+  }, [filteredUsers, currentPage]);
 
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
@@ -99,13 +123,9 @@ export default function AdminUserListClient({ initialUsers }: AdminUserListClien
     return <div className="mt-6 p-4 bg-destructive/10 text-destructive border border-destructive/20 rounded-md">{error}</div>;
   }
 
-  if (users.length === 0 && !isLoading) {
-    return <p className="mt-6 text-center text-muted-foreground">No users found. Users are added via the signup page.</p>;
-  }
-
   const DetailViewContent = ({ user }: { user: User }) => (
     <>
-      <ScrollArea className="max-h-[70vh] sm:max-h-[80vh]">
+      <ScrollArea className="max-h-[calc(100vh-12rem)]"> {/* Adjust max height */}
         <div className="p-4 sm:p-6 space-y-3 text-sm">
           <div className="space-y-1">
             <h4 className="font-semibold text-lg text-primary">{user.name}</h4>
@@ -117,7 +137,7 @@ export default function AdminUserListClient({ initialUsers }: AdminUserListClien
           </div>
         </div>
       </ScrollArea>
-      <div className="p-4 sm:p-6 border-t">
+      <div className="p-4 sm:p-6 border-t mt-auto"> {/* mt-auto to push footer down */}
         <Button asChild className="w-full">
           <Link href={`/admin/users/edit/${user.id}`}>
             <Edit className="mr-2 h-4 w-4"/> Edit User
@@ -129,6 +149,40 @@ export default function AdminUserListClient({ initialUsers }: AdminUserListClien
   
   return (
     <>
+      <div className="mb-6 p-4 bg-card border rounded-lg shadow-sm">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search by name or email..."
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              className="pl-10 pr-4 py-2 text-sm rounded-md"
+            />
+          </div>
+          <div className="relative">
+            <Select value={selectedRole} onValueChange={(value) => { setSelectedRole(value); setCurrentPage(1); }}>
+              <SelectTrigger className="w-full text-sm py-2 rounded-md">
+                <ListFilter className="h-4 w-4 text-muted-foreground mr-2" />
+                <SelectValue placeholder="Filter by role" />
+              </SelectTrigger>
+              <SelectContent>
+                {userRoles.map(role => (
+                  <SelectItem key={role} value={role} className="capitalize text-sm">
+                    {role === 'all' ? 'All Roles' : role}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {paginatedUsers.length === 0 && !isLoading && (
+        <p className="mt-6 text-center text-muted-foreground">No users match your current search/filter.</p>
+      )}
+
       <div className="mt-6 space-y-3">
         {paginatedUsers.map((user) => (
           <div 
@@ -164,34 +218,26 @@ export default function AdminUserListClient({ initialUsers }: AdminUserListClien
       {selectedUser && (
         isMobileView ? (
           <Drawer open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}>
-            <DrawerContent className="max-h-[85vh]">
-              <DrawerHeader className="text-left">
+            <DrawerContent className="max-h-[85vh] flex flex-col">
+              <DrawerHeader className="text-left flex-shrink-0">
                 <DrawerTitle>User Details</DrawerTitle>
                 <DrawerDescription>{selectedUser.name}</DrawerDescription>
               </DrawerHeader>
-              <DetailViewContent user={selectedUser} />
-              <DrawerFooter className="pt-2">
-                <DrawerClose asChild>
-                  <Button variant="outline">Close</Button>
-                </DrawerClose>
-              </DrawerFooter>
+              <div className="flex-grow overflow-hidden">
+                <DetailViewContent user={selectedUser} />
+              </div>
             </DrawerContent>
           </Drawer>
         ) : (
           <Sheet open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}>
-            <SheetContent className="sm:max-w-md w-full flex flex-col">
-              <SheetHeader>
+            <SheetContent className="sm:max-w-md w-full flex flex-col p-0">
+              <SheetHeader className="p-4 sm:p-6 border-b flex-shrink-0">
                 <SheetTitle>User Details</SheetTitle>
                 <SheetDescription>{selectedUser.name}</SheetDescription>
               </SheetHeader>
               <div className="flex-grow overflow-hidden">
                  <DetailViewContent user={selectedUser} />
               </div>
-               <SheetFooter className="pt-2 mt-auto">
-                 <SheetClose asChild>
-                   <Button variant="outline">Close</Button>
-                 </SheetClose>
-               </SheetFooter>
             </SheetContent>
           </Sheet>
         )
@@ -199,3 +245,4 @@ export default function AdminUserListClient({ initialUsers }: AdminUserListClien
     </>
   );
 }
+

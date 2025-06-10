@@ -5,7 +5,8 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { type DownloadWithDetails } from '@/lib/tracking-service-firebase';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { BookCopy, Users, CalendarDays, ChevronRight, FileText, Download } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { BookCopy, Users, Download, FileText, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import PaginationControls from '@/components/books/PaginationControls';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,6 +28,7 @@ export default function AdminDownloadListClient({ initialDownloads, isLoadingIni
   const [isLoading, setIsLoading] = useState(propIsLoadingInitial);
   const [currentPage, setCurrentPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
 
   useEffect(() => {
@@ -68,14 +70,27 @@ export default function AdminDownloadListClient({ initialDownloads, isLoadingIni
     return () => unsubscribe();
   }, []);
 
+  const filteredDownloads = useMemo(() => {
+    let currentDownloads = downloads;
+    if (searchTerm) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      currentDownloads = currentDownloads.filter(dl =>
+        (dl.bookTitle && dl.bookTitle.toLowerCase().includes(lowerSearchTerm)) ||
+        (dl.userName && dl.userName.toLowerCase().includes(lowerSearchTerm)) ||
+        (dl.userEmail && dl.userEmail.toLowerCase().includes(lowerSearchTerm))
+      );
+    }
+    return currentDownloads;
+  }, [downloads, searchTerm]);
 
-  const totalPages = Math.ceil(downloads.length / DOWNLOADS_PER_PAGE);
+
+  const totalPages = Math.ceil(filteredDownloads.length / DOWNLOADS_PER_PAGE);
 
   const paginatedDownloads = useMemo(() => {
     const startIndex = (currentPage - 1) * DOWNLOADS_PER_PAGE;
     const endIndex = startIndex + DOWNLOADS_PER_PAGE;
-    return downloads.slice(startIndex, endIndex);
-  }, [downloads, currentPage]);
+    return filteredDownloads.slice(startIndex, endIndex);
+  }, [filteredDownloads, currentPage]);
 
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
@@ -86,6 +101,9 @@ export default function AdminDownloadListClient({ initialDownloads, isLoadingIni
   if (isLoading && downloads.length === 0) {
     return (
       <div className="space-y-3 mt-6">
+        <div className="mb-6 p-4 bg-card border rounded-lg shadow-sm">
+             <Skeleton className="h-10 w-full md:w-1/2" />
+        </div>
         {[...Array(5)].map((_, i) => (
           <div key={i} className="p-4 border rounded-lg shadow-sm bg-card">
             <Skeleton className="h-5 w-2/3 mb-2" />
@@ -101,12 +119,25 @@ export default function AdminDownloadListClient({ initialDownloads, isLoadingIni
     return <div className="mt-6 p-4 bg-destructive/10 text-destructive border border-destructive/20 rounded-md">{error}</div>;
   }
   
-  if (downloads.length === 0 && !isLoading) {
-    return <p className="mt-6 text-center text-muted-foreground">No download records found.</p>;
-  }
-
   return (
     <>
+      <div className="mb-6 p-4 bg-card border rounded-lg shadow-sm">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search by Book Title, User Name or Email..."
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            className="pl-10 pr-4 py-2 text-sm rounded-md w-full"
+          />
+        </div>
+      </div>
+
+      {paginatedDownloads.length === 0 && !isLoading && (
+        <p className="mt-6 text-center text-muted-foreground">No download records match your current search.</p>
+      )}
+
       <div className="mt-6 space-y-3">
         {paginatedDownloads.map((dl) => (
           <div key={dl.id} className="p-4 border rounded-lg shadow-sm bg-card hover:shadow-md transition-shadow">
@@ -156,3 +187,4 @@ export default function AdminDownloadListClient({ initialDownloads, isLoadingIni
     </>
   );
 }
+
