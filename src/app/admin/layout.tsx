@@ -2,7 +2,7 @@
 'use client'; 
 
 import { useEffect, useState } from 'react'; 
-import { usePathname, useRouter } from 'next/navigation'; // Combined useRouter and usePathname
+import { usePathname, useRouter } from 'next/navigation';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { Toaster } from "@/components/ui/toaster";
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,7 +22,7 @@ export default function AdminLayout({
 }) {
   const { currentUser, isLoading: authIsLoading, logout } = useAuth();
   const router = useRouter();
-  const currentPathname = usePathname(); // Using usePathname directly
+  const currentPathname = usePathname(); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -43,7 +43,6 @@ export default function AdminLayout({
     return (
       <>
         <div className="flex min-h-screen bg-background">
-          {/* Consider a simplified loading state for the sidebar area or just the main content */}
           <div className="w-64 bg-card border-r hidden md:block"></div> 
           <main className="flex-1 p-6 md:p-8 overflow-auto flex items-center justify-center">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -73,11 +72,10 @@ export default function AdminLayout({
   return (
     <>
       <div className="flex min-h-screen bg-background">
-        <AdminSidebar /> {/* Desktop sidebar - now sticky and styled */}
-        <div className="flex-1 flex flex-col overflow-hidden"> {/* Main content wrapper */}
-          {/* Mobile Header for Admin - Styled to be sticky and inset */}
+        <AdminSidebar /> 
+        <div className="flex-1 flex flex-col overflow-hidden"> 
           <header className="md:hidden sticky top-0 z-40 bg-card shadow-md rounded-xl mx-2 my-2">
-            <div className="flex items-center justify-between px-4 py-3"> {/* Increased internal padding */}
+            <div className="flex items-center justify-between px-4 py-3"> 
                 <Link href="/admin" className="flex items-center space-x-2 text-primary">
                 <AdminLogoIcon className="h-7 w-7" />
                 <h1 className="text-xl font-headline font-bold">Admin</h1>
@@ -104,7 +102,7 @@ export default function AdminLayout({
                     <ScrollArea className="flex-grow"> 
                     <nav className="flex flex-col space-y-1 p-4">
                         {adminNavItems.map((item) => (
-                        <SheetClose asChild key={item.label}>
+                        <SheetClose asChild key={item.href}>
                             <Link
                             href={item.href}
                             className={cn(
@@ -147,7 +145,7 @@ export default function AdminLayout({
                 </Sheet>
             </div>
           </header>
-          <main className="flex-1 p-6 md:p-8 overflow-y-auto"> {/* Ensure main content area is scrollable */}
+          <main className="flex-1 p-6 md:p-8 overflow-y-auto"> 
             {children}
           </main>
         </div>
