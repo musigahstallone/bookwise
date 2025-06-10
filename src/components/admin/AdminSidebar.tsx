@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -36,12 +35,12 @@ export default function AdminSidebar() {
           {navItems.map((item) => (
             <Button
               key={item.label}
-              variant={pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href)) ? 'secondary' : 'ghost'}
-              className="w-full justify-start text-base py-2.5 px-3" // Increased text size and padding
+              variant={pathname === item.href || (item.href !== '/admin' && typeof pathname === 'string' && pathname.startsWith(item.href)) ? 'secondary' : 'ghost'}
+              className="w-full justify-start text-base py-2.5 px-3" 
               asChild
             >
               <Link href={item.href}>
-                <item.icon className="mr-3 h-5 w-5" /> {/* Increased icon margin */}
+                <item.icon className="mr-3 h-5 w-5" /> 
                 {item.label}
               </Link>
             </Button>
@@ -49,8 +48,8 @@ export default function AdminSidebar() {
         </nav>
       </ScrollArea>
       <div className="mt-auto p-4 border-t border-border">
-         <Button variant="outline" className="w-full text-base py-2.5" asChild> {/* Increased text size and padding */}
-            <Link href="/">Back to Main Site</Link>
+         <Button variant="outline" className="w-full text-base py-2.5" asChild> 
+            <Link href="/"><span>Back to Main Site</span></Link>
          </Button>
       </div>
     </aside>
