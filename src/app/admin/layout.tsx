@@ -2,7 +2,7 @@
 'use client'; 
 
 import { useEffect, useState } from 'react'; 
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation'; // Added usePathname
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { Toaster } from "@/components/ui/toaster";
 import { useAuth, type CombinedUser } from '@/contexts/AuthContext';
@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button'; 
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet'; 
 import { cn } from '@/lib/utils'; 
-import { navItems as adminNavItems } from '@/components/admin/AdminSidebar'; // Import directly
+import { navItems as adminNavItems } from '@/components/admin/AdminSidebar';
 
 export default function AdminLayout({
   children,
@@ -19,7 +19,8 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const { currentUser, isLoading } = useAuth();
-  const router = useRouter();
+  const router = useRouter(); // Keep for navigation
+  const currentPathname = usePathname(); // Use for path checking
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -93,7 +94,8 @@ export default function AdminLayout({
                         href={item.href}
                         className={cn(
                           "flex items-center rounded-md px-3 py-2.5 text-base font-medium hover:bg-muted",
-                          router.pathname === item.href || (item.href !== '/admin' && router.pathname.startsWith(item.href))
+                          (currentPathname === item.href || 
+                           (typeof currentPathname === 'string' && item.href !== '/admin' && currentPathname.startsWith(item.href)))
                             ? "bg-muted text-primary"
                             : "text-foreground"
                         )}
