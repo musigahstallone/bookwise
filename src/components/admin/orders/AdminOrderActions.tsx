@@ -7,7 +7,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
+  // DropdownMenuSeparator, // Not used currently
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -20,18 +20,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MoreHorizontal, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { MoreHorizontal, CheckCircle, XCircle, AlertCircle, Loader2, Settings } from 'lucide-react'; // Added Settings icon
 import { useToast } from '@/hooks/use-toast';
 import { handleAdminUpdateOrderStatus, type OrderStatus } from '@/lib/actions/trackingActions';
 
 interface AdminOrderActionsProps {
   orderId: string;
   currentStatus: OrderStatus;
+  onStatusChange?: () => void; // Optional: To close parent modal/drawer
 }
 
 type ActionType = 'completed' | 'failed' | 'cancelled';
 
-export default function AdminOrderActions({ orderId, currentStatus }: AdminOrderActionsProps) {
+export default function AdminOrderActions({ orderId, currentStatus, onStatusChange }: AdminOrderActionsProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [actionToConfirm, setActionToConfirm] = useState<ActionType | null>(null);
@@ -47,13 +48,13 @@ export default function AdminOrderActions({ orderId, currentStatus }: AdminOrder
 
     if (result.success) {
       toast({ title: 'Order Updated', description: result.message });
+      if (onStatusChange) onStatusChange(); // Call callback if provided
     } else {
       toast({ title: 'Error', description: result.message, variant: 'destructive' });
     }
     setIsLoading(false);
     setShowDialog(false);
     setActionToConfirm(null);
-    // Revalidation should happen via server action, page will update on next load or if revalidatePath works
   };
 
   const openConfirmationDialog = (action: ActionType) => {
@@ -85,33 +86,41 @@ export default function AdminOrderActions({ orderId, currentStatus }: AdminOrder
     }
   }
 
+  // Determine if any actions are available based on current status
+  const canMarkCompleted = currentStatus === 'pending' || currentStatus === 'failed';
+  const canMarkFailed = currentStatus === 'pending' || currentStatus === 'completed';
+  const canMarkCancelled = currentStatus === 'pending' || currentStatus === 'completed' || currentStatus === 'failed'; // Allow cancelling from failed too
+  const noActionsAvailable = !canMarkCompleted && !canMarkFailed && !canMarkCancelled;
+
+
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="h-8 w-8 p-0" disabled={isLoading}>
-            <span className="sr-only">Open menu</span>
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+          <Button variant="outline" className="w-full sm:w-auto" disabled={isLoading || noActionsAvailable}>
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Settings className="mr-2 h-4 w-4" />}
+            Manage Status
+            {!isLoading && <MoreHorizontal className="ml-auto h-4 w-4 sm:ml-2" />}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {(currentStatus === 'pending' || currentStatus === 'failed') && (
+        <DropdownMenuContent align="end" className="w-56">
+          {canMarkCompleted && (
             <DropdownMenuItem onClick={() => openConfirmationDialog('completed')} disabled={isLoading}>
               <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> Mark as Completed
             </DropdownMenuItem>
           )}
-          {(currentStatus === 'pending' || currentStatus === 'completed') && (
-            <>
-              <DropdownMenuItem onClick={() => openConfirmationDialog('failed')} disabled={isLoading}>
-                <AlertCircle className="mr-2 h-4 w-4 text-orange-500" /> Mark as Failed
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openConfirmationDialog('cancelled')} disabled={isLoading} className="text-destructive focus:text-destructive">
-                <XCircle className="mr-2 h-4 w-4" /> Mark as Cancelled
-              </DropdownMenuItem>
-            </>
+          {canMarkFailed && (
+            <DropdownMenuItem onClick={() => openConfirmationDialog('failed')} disabled={isLoading}>
+              <AlertCircle className="mr-2 h-4 w-4 text-orange-500" /> Mark as Failed
+            </DropdownMenuItem>
           )}
-           {currentStatus === 'completed' && (currentStatus !== 'pending' && currentStatus !== 'failed') && (
-             <DropdownMenuItem disabled>No pending actions</DropdownMenuItem>
+          {canMarkCancelled && (
+            <DropdownMenuItem onClick={() => openConfirmationDialog('cancelled')} disabled={isLoading} className="text-destructive focus:text-destructive">
+              <XCircle className="mr-2 h-4 w-4" /> Mark as Cancelled
+            </DropdownMenuItem>
+          )}
+           {noActionsAvailable && (
+             <DropdownMenuItem disabled>No status actions available</DropdownMenuItem>
            )}
         </DropdownMenuContent>
       </DropdownMenu>
@@ -119,7 +128,7 @@ export default function AdminOrderActions({ orderId, currentStatus }: AdminOrder
       <AlertDialog open={showDialog} onOpenChange={setShowDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Action: Mark as {actionToConfirm}</AlertDialogTitle>
+            <AlertDialogTitle>Confirm: Mark as {actionToConfirm}</AlertDialogTitle>
             <AlertDialogDescription>
               {getDialogDescription()}
             </AlertDialogDescription>
