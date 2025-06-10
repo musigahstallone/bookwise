@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { type DownloadWithDetails } from '@/lib/tracking-service-firebase';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
