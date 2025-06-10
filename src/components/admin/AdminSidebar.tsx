@@ -7,7 +7,7 @@ import { Home, BookCopy, Users as UsersIcon, Settings, ShoppingCart, Download } 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
-const navItems = [
+export const navItems = [ // Exported navItems
   { href: '/admin', label: 'Dashboard', icon: Home },
   { href: '/admin/books', label: 'Manage Books', icon: BookCopy },
   { href: '/admin/users', label: 'Manage Users', icon: UsersIcon },

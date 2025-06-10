@@ -1,27 +1,17 @@
 
 'use client'; 
 
-import { useEffect, useState } from 'react'; // Added useState
+import { useEffect, useState } from 'react'; 
 import { useRouter } from 'next/navigation';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import { Toaster } from "@/components/ui/toaster";
 import { useAuth, type CombinedUser } from '@/contexts/AuthContext';
-import { Loader2, ShieldAlert, Menu, BookCopy as AdminLogoIcon, X as CloseIcon } from 'lucide-react'; // Added Menu, AdminLogoIcon, CloseIcon
-import Link from 'next/link'; // Added Link
-import { Button } from '@/components/ui/button'; // Added Button
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet'; // Added Sheet components
-import { cn } from '@/lib/utils'; // Added cn
-
-// Re-using navItems from AdminSidebar logic.
-// Ideally, this would be sourced from a shared config if it grows.
-const adminNavItems = [
-  { href: '/admin', label: 'Dashboard', icon: AdminSidebar.prototype.constructor.navItems[0].icon },
-  { href: '/admin/books', label: 'Manage Books', icon: AdminSidebar.prototype.constructor.navItems[1].icon },
-  { href: '/admin/users', label: 'Manage Users', icon: AdminSidebar.prototype.constructor.navItems[2].icon },
-  { href: '/admin/orders', label: 'View Orders', icon: AdminSidebar.prototype.constructor.navItems[3].icon },
-  { href: '/admin/downloads', label: 'View Downloads', icon: AdminSidebar.prototype.constructor.navItems[4].icon },
-];
-
+import { Loader2, ShieldAlert, Menu, BookCopy as AdminLogoIcon, X as CloseIcon } from 'lucide-react'; 
+import Link from 'next/link'; 
+import { Button } from '@/components/ui/button'; 
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet'; 
+import { cn } from '@/lib/utils'; 
+import { navItems as adminNavItems } from '@/components/admin/AdminSidebar'; // Import directly
 
 export default function AdminLayout({
   children,
