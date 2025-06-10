@@ -3,6 +3,7 @@ import BookForm from '@/components/admin/books/BookForm';
 import { getBookByIdFromDb } from '@/lib/book-service-firebase'; // Updated
 import { notFound } from 'next/navigation';
 import type { Book } from '@/data/books';
+import { isGenkitConfigured } from '@/ai/genkit';
 
 interface EditBookPageProps {
   params: { id: string };
@@ -12,6 +13,7 @@ export default async function EditBookPage({ params }: EditBookPageProps) {
   const { id } = params;
   let book: Book | null = null;
   let firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const genkitAvailable = isGenkitConfigured;
 
   if (firebaseConfigured) {
      book = await getBookByIdFromDb(id);
@@ -29,7 +31,7 @@ export default async function EditBookPage({ params }: EditBookPageProps) {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-headline font-bold text-primary">Edit Book</h1>
-      <BookForm bookToEdit={book} bookId={id} />
+      <BookForm bookToEdit={book} bookId={id} genkitAvailable={genkitAvailable} />
     </div>
   );
 }

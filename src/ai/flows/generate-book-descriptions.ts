@@ -8,7 +8,7 @@
  * - GenerateBookDescriptionsOutput - Output type for the flow.
  */
 
-import {ai, isGenkitConfigured} from '@/ai/genkit';
+import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const GenerateBookDescriptionsInputSchema = z.object({
@@ -25,7 +25,8 @@ const GenerateBookDescriptionsOutputSchema = z.object({
 export type GenerateBookDescriptionsOutput = z.infer<typeof GenerateBookDescriptionsOutputSchema>;
 
 export async function generateBookDescriptions(input: GenerateBookDescriptionsInput): Promise<GenerateBookDescriptionsOutput> {
-  if (!isGenkitConfigured) {
+  const genkitKeyIsSet = !!process.env.GOOGLE_API_KEY;
+  if (!genkitKeyIsSet) {
     console.warn("AI Description Generator (Genkit/Google AI) is not configured due to missing API key. Returning placeholder descriptions.");
     return { 
         shortDescription: "Description generation AI is not available. Please configure the API key.",
@@ -71,3 +72,4 @@ const generateBookDescriptionsFlow = ai.defineFlow(
     return output;
   }
 );
+

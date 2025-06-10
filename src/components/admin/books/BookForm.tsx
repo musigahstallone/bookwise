@@ -19,7 +19,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject, uploadByt
 import { handleAddBook, handleUpdateBook } from '@/lib/actions/bookActions';
 import Image from 'next/image';
 import { cn } from "@/lib/utils";
-import { isGenkitConfigured } from '@/ai/genkit'; // For checking AI config
+// import { isGenkitConfigured } from '@/ai/genkit'; // No longer imported directly
 import { generateBookDescriptions } from '@/ai/flows/generate-book-descriptions'; // New AI flow
 
 const currentYear = new Date().getFullYear();
@@ -42,9 +42,10 @@ export type BookFormValues = z.infer<typeof bookFormSchema>;
 interface BookFormProps {
   bookToEdit?: Book | null;
   bookId?: string;
+  genkitAvailable: boolean; // New prop
 }
 
-export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
+export default function BookForm({ bookToEdit, bookId, genkitAvailable }: BookFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -60,7 +61,7 @@ export default function BookForm({ bookToEdit, bookId }: BookFormProps) {
 
   const isEditMode = !!bookId && !!bookToEdit;
   const firebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  const genkitAvailable = isGenkitConfigured;
+  // const genkitAvailable = isGenkitConfigured; // Use prop instead
 
 
   const form = useForm<BookFormValues>({
