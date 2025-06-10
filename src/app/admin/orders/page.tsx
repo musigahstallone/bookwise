@@ -1,8 +1,8 @@
 
 // src/app/admin/orders/page.tsx
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertTriangle, ShoppingCart, MoreHorizontal, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
-import { getAllOrdersWithUserDetailsFromDb, type OrderWithUserDetails, type OrderStatus } from '@/lib/tracking-service-firebase';
+import { AlertTriangle, ShoppingCart } from 'lucide-react';
+import { getAllOrdersWithUserDetailsFromDb, type OrderWithUserDetails } from '@/lib/tracking-service-firebase';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,28 +13,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { getRegionByCode, defaultRegion } from '@/data/regionData';
-import AdminOrderActions from '@/components/admin/orders/AdminOrderActions'; // New component
+import AdminOrderActions from '@/components/admin/orders/AdminOrderActions';
+import AdminOrdersToolbar from '@/components/admin/orders/AdminOrdersToolbar'; // New import
 
 const ORDERS_PER_PAGE = 10;
 
@@ -85,14 +68,7 @@ export default async function ManageOrdersPage({ searchParams }: ManageOrdersPag
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-headline font-bold text-primary flex items-center">
-            <ShoppingCart className="mr-3 h-8 w-8" /> Manage Orders
-          </h1>
-          <p className="text-muted-foreground">View all customer orders and manage their status.</p>
-        </div>
-      </div>
+      <AdminOrdersToolbar />
 
       {!firebaseConfigured && (
         <div className="mt-6 p-4 bg-destructive/10 border-l-4 border-destructive text-destructive-foreground rounded-md">
