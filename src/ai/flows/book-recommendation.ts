@@ -49,7 +49,6 @@ const prompt = ai.definePrompt({
   name: 'bookRecommendationPrompt',
   input: {schema: BookRecommendationInputSchema},
   output: {schema: BookRecommendationOutputSchema},
-  model: 'googleai/gemini-2.0-flash', // Specify the model here
   prompt: `You are a book recommendation expert. A user will describe their current mood, or the type of book they are looking for. You will suggest books from the available catalog that best fit their needs.
 
 User Input: {{{userInput}}}

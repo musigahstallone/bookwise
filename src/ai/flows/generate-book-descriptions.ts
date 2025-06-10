@@ -16,11 +16,12 @@ const GenerateBookDescriptionsInputSchema = z.object({
   author: z.string().describe('The author of the book.'),
   category: z.string().optional().describe('The category or genre of the book (optional).'),
 });
+
 export type GenerateBookDescriptionsInput = z.infer<typeof GenerateBookDescriptionsInputSchema>;
 
 const GenerateBookDescriptionsOutputSchema = z.object({
-  shortDescription: z.string().describe('A compelling short description (2-3 sentences).'),
-  longDescription: z.string().describe('A more detailed long description (2-3 paragraphs).'),
+  shortDescription: z.string().describe('A compelling short description (3 sentences).'),
+  longDescription: z.string().describe('A more detailed long description (2 paragraphs).'),
 });
 export type GenerateBookDescriptionsOutput = z.infer<typeof GenerateBookDescriptionsOutputSchema>;
 
@@ -40,7 +41,6 @@ const prompt = ai.definePrompt({
   name: 'generateBookDescriptionsPrompt',
   input: {schema: GenerateBookDescriptionsInputSchema},
   output: {schema: GenerateBookDescriptionsOutputSchema},
-  model: 'googleai/gemini-2.0-flash',
   prompt: `You are an expert book copywriter.
 Given the book title: "{{{title}}}"
 By author: "{{{author}}}"
@@ -49,8 +49,8 @@ In the category/genre: "{{{category}}}"
 {{/if}}
 
 Based on this information, please generate:
-1. A compelling short description (approximately 2-3 sentences) suitable for a quick overview on an online bookstore. This should be engaging and make someone want to learn more.
-2. A more detailed long description (approximately 2-3 paragraphs, but can be longer if needed for a comprehensive summary). This should elaborate on the premise, themes, or what readers can expect, without giving away major spoilers.
+1. A compelling short description (approximately 3 sentences) suitable for a quick overview on an online bookstore. This should be engaging and make someone want to learn more.
+2. A more detailed long description (approximately 2 paragraphs, but can be longer if needed for a comprehensive summary). This should elaborate on the premise, themes, or what readers can expect, without giving away major spoilers.
 
 Focus on intrigue and what would make someone want to read this book.
 Return the descriptions in the specified JSON format.
