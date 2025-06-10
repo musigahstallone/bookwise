@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button'; 
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet'; 
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area'; // Added import
 import { cn } from '@/lib/utils'; 
 import { navItems as adminNavItems } from '@/components/admin/AdminSidebar'; // Using exported navItems
 
